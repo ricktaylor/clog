@@ -1,0 +1,6 @@
+/build-aux
+/autom4te.cache
+/aclocal.m4
+/autoheader_dummy.h.in
+/configure
+/Makefile.in

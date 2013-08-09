@@ -2,7 +2,11 @@
 #include <stddef.h>
 #include <string.h>
 
+
+#include <stdio.h>
+
 void* clog_malloc(size_t s);
+void* clog_realloc(void* p, size_t s);
 void clog_free(void* p);
 
 %%{
@@ -35,24 +39,28 @@ void clog_free(void* p);
     multi_comment =  '/*' (char* -- '*/') '*/';
     
     non_quote = char* -- (backslash '"' | '"');
-    string_part = '"' non_quote (backslash '"' non_quote)* '"';
-    string = string_part (whitespace* string_part)*;
-    
+    string = '"' non_quote (backslash '"' non_quote)* '"';
+        
     main := |*
-    	whitespace;
-    	comment;
-    	multi_comment;
-    	string;
-    	'0' | ([1-9] [0-9]*);  # Decimal integers
+    	whitespace;  # Gobble witespace
+    	
+    	comment => { printf("COMMENT: %.*s\n",(int)(te-ts),ts);};
+    	multi_comment => { printf("COMMENT: %.*s\n",(int)(te-ts),ts);};
+    	string => { printf("STRING: %.*s\n",(int)(te-ts),ts);};
+    	
+    	'0' | ([1-9] [0-9]*) => { printf("INT10: %.*s\n",(int)(te-ts),ts);};  # Decimal integers
     	'0x' [A-Fa-f0-9]+;     # Hex integers
-    	'0' [0-7]+;            # Octal integers
+    	'0' [0-7]+ => { printf("INT8: %.*s\n",(int)(te-ts),ts);};            # Octal integers
     	"'" [0x20..0x7E] "'";  # ASCII integers
     	[0-9]+ '.' [0-9]+ (('e' | 'E') ('+' | '-')? [0-9]+)?;  # Floating point
+    	
     	'{';
     	'}';
-    	';';
     	'(';
     	')';
+    	
+    	';';
+    	
     	'null';
     	'true';
     	'false'
@@ -78,7 +86,7 @@ int parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param)
 	unsigned char* p;
 	unsigned char* ts;
 	unsigned char* te;
-	const size_t buffer_size = 4096;
+	size_t buffer_size = 1024;
 	
 	%% write init;
 		
@@ -93,7 +101,7 @@ int parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param)
 		size_t read = space;
 		
 		if ((*rd_fn)(param,p,&read) != 0)
-			return -1;
+			break;
 		
 		pe = p + read;
 		if (read < space)
@@ -111,13 +119,30 @@ int parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param)
 		if (ts)
 		{
 			space = pe - ts;
+			if (space == buffer_size)
+			{
+				unsigned char* new_buffer = clog_realloc(buffer,buffer_size * 2);
+				if (!new_buffer)
+					break;
+					
+				buffer_size *= 2;
+				ts = new_buffer + (ts - buffer);
+				p = new_buffer;				
+				buffer = new_buffer;
+			}
+			
 			memmove(p,ts,space);
 			ts = p;
-			p += space;			
+			p += space;
 		}
 	}
 	
 	clog_free(buffer);
+	
+	if (cs >= %%{ write first_final; }%%)
+		printf("*** OK ***\n");
+	else if (cs == %%{ write error; }%%)
+		printf("*** Error ***\n");
 		
 	return 0;
 }
