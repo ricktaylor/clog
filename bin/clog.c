@@ -3,7 +3,7 @@
 #include <errno.h>
 #include <string.h>
 
-int parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param);
+#include "../lib/tokenizer.h"
 
 void* clog_malloc(size_t s)
 {
@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	parse(&read_fn,f);
+	tokenize(&read_fn,f);
 
 	fclose(f);
 

@@ -1,0 +1,44 @@
+
+%name parse
+
+%include 
+{
+#include "tokenizer.h"
+#include <assert.h> 
+}
+
+%token_prefix CLOG_
+%token_type { struct Token }
+%token_destructor { token_destroy(&$$); (void)param; }
+
+%extra_argument { void* param }
+
+%start_symbol program
+
+program ::= statements.
+
+statements ::= statements statement.
+statements ::= statement.
+
+statement ::= dangling_if.
+statement ::= not_dangling_if.
+
+/* If's just make the grammar horrible
+
+http://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else
+
+ */
+
+not_dangling_if ::= DO statement WHILE OPEN_PAREN expression CLOSE_PAREN.
+not_dangling_if ::= expression SEMI_COLON.
+not_dangling_if ::= OPEN_BRACE statements CLOSE_BRACE. 
+not_dangling_if ::= IF OPEN_PAREN expression CLOSE_PAREN not_dangling_if ELSE not_dangling_if.
+not_dangling_if ::= WHILE OPEN_PAREN expression CLOSE_PAREN not_dangling_if.
+not_dangling_if ::= FOR OPEN_PAREN expression SEMI_COLON expression SEMI_COLON expression CLOSE_PAREN not_dangling_if.
+
+dangling_if ::= IF OPEN_PAREN expression CLOSE_PAREN statement.
+dangling_if ::= IF OPEN_PAREN expression CLOSE_PAREN not_dangling_if ELSE dangling_if.
+dangling_if ::= WHILE OPEN_PAREN expression CLOSE_PAREN dangling_if.
+dangling_if ::= FOR OPEN_PAREN expression SEMI_COLON expression SEMI_COLON expression CLOSE_PAREN dangling_if.
+
+expression ::= STRING.
