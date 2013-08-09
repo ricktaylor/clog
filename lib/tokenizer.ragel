@@ -1,0 +1,123 @@
+
+#include <stddef.h>
+#include <string.h>
+
+void* clog_malloc(size_t s);
+void clog_free(void* p);
+
+%%{
+	machine xml;
+	alphtype unsigned char;
+	
+	# UTF-8 validation
+	utf8_cont = 0x80..0xBF;
+    utf8_one_byte = 0x00..0x7F;
+    utf8_two_byte_basic      = (0xC0..0xDF) utf8_cont;
+    utf8_two_byte_overlong   = (0xC0..0xC1) utf8_cont;
+    utf8_two_byte            = utf8_two_byte_basic - utf8_two_byte_overlong;
+    utf8_three_byte_basic    = (0xE0..0xEF) utf8_cont{2};
+    utf8_three_byte_overlong = 0xE0 (0x80..0x9F) utf8_cont;
+    utf8_three_byte_reserved = 0xED (0xA0..0xBF) utf8_cont;  # U+D800 to U+DFFF
+    utf8_three_byte          = utf8_three_byte_basic - utf8_three_byte_overlong - utf8_three_byte_reserved;
+    utf8_four_byte_basic     = (0xF0..0xF4) utf8_cont{3};
+    utf8_four_byte_overlong  = 0xF0 (0x80..0x8F) utf8_cont{2};
+    utf8_four_byte_reserved  = 0xF4 (0x90..0xBF) utf8_cont{2};    # > U+10FFFF
+    utf8_four_byte           = utf8_four_byte_basic - utf8_four_byte_overlong - utf8_four_byte_reserved;
+    utf8_char                = (utf8_one_byte | utf8_two_byte | utf8_three_byte | utf8_four_byte);
+    
+    # All characters with C0, C1 and continuation characters removed
+    char = utf8_char - ((0x00..0x08) | 0x0B | 0x0C | (0x0E..0x1F) | 0x7F | 0xC2 (0x80..0x84) | 0xC2 (0x86..0x9F) | (0xEF 0xBF 0xBE) | (0xEF 0xBF 0xBF));
+    
+    whitespace = 0x09 | 0x0A | 0x0D | 0x20;
+    backslash = 0x5C;
+    
+    comment = '//' (char* -- 0x0A) 0x0A;
+    multi_comment =  '/*' (char* -- '*/') '*/';
+    
+    non_quote = char* -- (backslash '"' | '"');
+    string_part = '"' non_quote (backslash '"' non_quote)* '"';
+    string = string_part (whitespace* string_part)*;
+    
+    main := |*
+    	whitespace;
+    	comment;
+    	multi_comment;
+    	string;
+    	'0' | ([1-9] [0-9]*);  # Decimal integers
+    	'0x' [A-Fa-f0-9]+;     # Hex integers
+    	'0' [0-7]+;            # Octal integers
+    	"'" [0x20..0x7E] "'";  # ASCII integers
+    	[0-9]+ '.' [0-9]+ (('e' | 'E') ('+' | '-')? [0-9]+)?;  # Floating point
+    	'{';
+    	'}';
+    	';';
+    	'(';
+    	')';
+    	'null';
+    	'true';
+    	'false'
+    	'if';
+    	'else';
+    	'while';
+    	'do';
+    	[A-Za-z_] [A-Za_z0-9_]* - ('null' | 'true' | 'false' | 'if' | 'else' | 'while' | 'do');
+    *|;
+        
+    dump := char;
+	
+}%%
+
+%% write data;
+
+int parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param)
+{
+	unsigned int cs;
+	unsigned int act;
+	const unsigned char* eof = NULL;
+	unsigned char* buffer;
+	unsigned char* p;
+	unsigned char* ts;
+	unsigned char* te;
+	const size_t buffer_size = 4096;
+	
+	%% write init;
+		
+	buffer = clog_malloc(buffer_size);
+	if (!buffer)
+		return -1;
+		
+	for (p = buffer;!eof;)
+	{
+		const unsigned char* pe;
+		ptrdiff_t space = buffer_size - (p - buffer);
+		size_t read = space;
+		
+		if ((*rd_fn)(param,p,&read) != 0)
+			return -1;
+		
+		pe = p + read;
+		if (read < space)
+			eof = pe;
+		
+		while (p != pe)
+		{
+			%% write exec;
+			
+			if (cs >= %%{ write first_final; }%% || cs == %%{ write error; }%%)
+				break;
+		}
+		
+		p = buffer;
+		if (ts)
+		{
+			space = pe - ts;
+			memmove(p,ts,space);
+			ts = p;
+			p += space;			
+		}
+	}
+	
+	clog_free(buffer);
+		
+	return 0;
+}
