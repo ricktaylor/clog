@@ -6,9 +6,118 @@
 
 #include <stdio.h>
 
+static void push_token(struct clog_parser_t* parser, unsigned int type)
+{
+	clog_parser(parser->lemon_parser,type,NULL,parser);
+}
+
+static int push_string(struct clog_parser_t* parser, const unsigned char* sz, size_t len)
+{
+	size_t i,j;
+	struct clog_token_t* tok = NULL;
+	unsigned char* str = clog_malloc(len+1);
+	if (!str)
+		return -1;
+		
+	for (i=0,j=0; i < len; ++i)
+	{
+		unsigned char rep = sz[i]; 
+		if (rep == '\\')
+		{
+			
+			switch (sz[++i])
+			{
+			case '\\':
+				break;
+				
+			case 't':
+				rep = '\t';
+				break;
+				
+			case 'n':
+				rep = '\n';
+				break;
+				
+			case 'r':
+				rep = '\r';
+				break;
+				
+			case '"':
+				rep = '"';
+				break;
+				
+			default:
+				clog_free(str);
+				return -1;
+			}
+		}
+		str[j++] = rep;
+	}
+	
+	len = j;
+	str[len] = 0;
+	
+	tok = clog_malloc(sizeof(*tok));
+	if (!tok)
+	{
+		clog_free(str);
+		return -1; 
+	}
+	
+	tok->type = clog_token_string;
+	tok->value.string.len = len;
+	tok->value.string.str = str;
+	
+	clog_parser(parser->lemon_parser,CLOG_TOKEN_STRING,tok,parser);
+	
+	return 0;
+}
+
+static int push_ident(struct clog_parser_t* parser, const unsigned char* sz, size_t len)
+{
+	struct clog_token_t* tok = NULL;
+	unsigned char* str = clog_malloc(len+1);
+	if (!str)
+		return -1;
+		
+	memcpy(str,sz,len);
+	str[len] = 0;
+	
+	tok = clog_malloc(sizeof(*tok));
+	if (!tok)
+	{
+		clog_free(str);
+		return -1; 
+	}
+	
+	tok->type = clog_token_string;
+	tok->value.string.len = len;
+	tok->value.string.str = str;
+	
+	clog_parser(parser->lemon_parser,CLOG_TOKEN_IDENTIFIER,tok,parser);
+	
+	return 0;
+}
+
+static int push_int(struct clog_parser_t* parser, unsigned long v)
+{
+	struct clog_token_t* tok = clog_malloc(sizeof(*tok));
+	if (!tok)
+		return -1; 
+		
+	tok->type = clog_token_integer;
+	tok->value.integer = v;
+	
+	clog_parser(parser->lemon_parser,CLOG_TOKEN_INTEGER,tok,parser);
+	
+	return 0;
+}
+
 %%{
-	machine xml;
+	machine clog;
 	alphtype unsigned char;
+	
+	action newline { ++parser->line; }
 	
 	# UTF-8 validation
 	utf8_cont = 0x80..0xBF;
@@ -26,46 +135,54 @@
     utf8_four_byte           = utf8_four_byte_basic - utf8_four_byte_overlong - utf8_four_byte_reserved;
     utf8_char                = (utf8_one_byte | utf8_two_byte | utf8_three_byte | utf8_four_byte);
     
-    # All characters with C0, C1 and continuation characters removed
-    char = utf8_char - ((0x00..0x08) | 0x0B | 0x0C | (0x0E..0x1F) | 0x7F | 0xC2 (0x80..0x84) | 0xC2 (0x86..0x9F) | (0xEF 0xBF 0xBE) | (0xEF 0xBF 0xBF));
+    # All characters with C0, C1 and continuation characters removed (except TAB)
+    char_no_LF = utf8_char - ((0x00..0x08) | (0x0A..0x1F) | 0x7F | (0xC2 (0x80..0x9F)) | (0xEF 0xBF 0xBE) | (0xEF 0xBF 0xBF));
+        
+    LF = (0x0A | (0x0D 0x0A) | 0x0D | (0xC2 0x85)) @newline;
+    char = char_no_LF | LF;
     
-    whitespace = 0x09 | 0x0A | 0x0D | 0x20;
+    whitespace = 0x09 | 0x20 | LF;
     backslash = 0x5C;
     
-    comment = '//' (char* -- 0x0A) 0x0A;
+    comment = '//' char_no_LF* LF;
     multi_comment =  '/*' (char* -- '*/') '*/';
     
     non_quote = char* -- (backslash '"' | '"');
     string = '"' non_quote (backslash '"' non_quote)* '"';
         
     main := |*
-    	whitespace;  # Gobble witespace
+    	whitespace;  
+    	comment;
+    	multi_comment;
     	
-    	comment => { printf("COMMENT: %.*s\n",(int)(te-ts),ts);};
-    	multi_comment => { printf("COMMENT: %.*s\n",(int)(te-ts),ts);};
-    	string => { printf("STRING: %.*s\n",(int)(te-ts),ts);};
+    	string => { if ((err = push_string(parser,ts+1,(te-ts)-2)) != 0) fbreak; };
     	
-    	'0' | ([1-9] [0-9]*) => { printf("INT10: %.*s\n",(int)(te-ts),ts);};  # Decimal integers
-    	'0x' [A-Fa-f0-9]+;     # Hex integers
-    	'0' [0-7]+ => { printf("INT8: %.*s\n",(int)(te-ts),ts);};            # Octal integers
-    	"'" [0x20..0x7E] "'";  # ASCII integers
+    	'0' | ([1-9] [0-9]*)               => { printf("INT10: %.*s\n",(int)(te-ts),ts);}; # Decimal integers
+    	'0x' [A-Fa-f0-9]+;                    # Hex integers
+    	'0' [0-7]+                         => { printf("INT8: %.*s\n",(int)(te-ts),ts);}; # Octal integers
+    	"'" ([0x20..0x7E] - backslash) "'" => { if ((err = push_int(parser,*(ts+1))) != 0) fbreak; }; # ASCII integers
+    	"'" backslash "''"                 => { if ((err = push_int(parser,'\'')) != 0) fbreak; };    # ASCII integers
+    	
     	[0-9]+ '.' [0-9]+ (('e' | 'E') ('+' | '-')? [0-9]+)?;  # Floating point
     	
-    	'{';
-    	'}';
-    	'(';
-    	')';
+    	'{' => { push_token(parser,CLOG_TOKEN_OPEN_BRACE); };
+    	'}' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACE); };
+    	'(' => { push_token(parser,CLOG_TOKEN_OPEN_PAREN); };
+    	')' => { push_token(parser,CLOG_TOKEN_CLOSE_PAREN); };
+    	';' => { push_token(parser,CLOG_TOKEN_SEMI_COLON); };
     	
-    	';';
+    	'if'    => { push_token(parser,CLOG_TOKEN_IF); };
+    	'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
+    	'while' => { push_token(parser,CLOG_TOKEN_WHILE); };
+    	'do'    => { push_token(parser,CLOG_TOKEN_DO); };
+    	'for'   => { push_token(parser,CLOG_TOKEN_FOR); };
     	
     	'null';
     	'true';
-    	'false'
-    	'if';
-    	'else';
-    	'while';
-    	'do';
-    	[A-Za-z_] [A-Za_z0-9_]* - ('null' | 'true' | 'false' | 'if' | 'else' | 'while' | 'do');
+    	'false';
+    	
+    	[A-Za-z_] [A-Za_z0-9_]* - ('if' | 'else' | 'while' | 'do' | 'for' | 'null' | 'true' | 'false') 
+    		=> { if ((err = push_ident(parser,ts,te-ts)) != 0) fbreak; };
     *|;
         
     dump := char;
@@ -74,7 +191,7 @@
 
 %% write data;
 
-int tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param)
+int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser_t* parser)
 {
 	unsigned int cs;
 	unsigned int act;
@@ -84,6 +201,7 @@ int tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param
 	unsigned char* ts;
 	unsigned char* te;
 	size_t buffer_size = 1024;
+	int err = 0;
 	
 	%% write init;
 		
@@ -91,20 +209,20 @@ int tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param
 	if (!buffer)
 		return -1;
 		
-	for (p = buffer;!eof;)
+	for (p = buffer;!err && !eof && !parser->failed;)
 	{
 		const unsigned char* pe;
 		ptrdiff_t space = buffer_size - (p - buffer);
 		size_t read = space;
 		
-		if ((*rd_fn)(param,p,&read) != 0)
+		if ((err = (*rd_fn)(rd_param,p,&read)) != 0)
 			break;
 		
 		pe = p + read;
 		if (read < space)
 			eof = pe;
 		
-		while (p != pe)
+		while (p != pe && !err && !parser->failed)
 		{
 			%% write exec;
 			
@@ -120,7 +238,10 @@ int tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param
 			{
 				unsigned char* new_buffer = clog_realloc(buffer,buffer_size * 2);
 				if (!new_buffer)
+				{
+					err = -1;
 					break;
+				}
 					
 				buffer_size *= 2;
 				ts = new_buffer + (ts - buffer);
@@ -136,10 +257,11 @@ int tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param
 	
 	clog_free(buffer);
 	
-	if (cs >= %%{ write first_final; }%%)
-		printf("*** OK ***\n");
-	else if (cs == %%{ write error; }%%)
+	if (!err && !parser->failed && cs < %%{ write first_final; }%%)
+	{
 		printf("*** Error ***\n");
+		err = -1;
+	}
 		
-	return 0;
+	return err;
 }

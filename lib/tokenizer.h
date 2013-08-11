@@ -14,12 +14,22 @@ void* clog_malloc(size_t s);
 void* clog_realloc(void* p, size_t s);
 void clog_free(void* p);
 
-int tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* param);
-
-struct Token
+struct clog_parser_t
 {
-	unsigned int type;
-	union t
+	int failed;
+	unsigned long line;
+	void* lemon_parser;
+};
+
+struct clog_token_t
+{
+	enum etype
+	{
+		clog_token_string,
+		clog_token_integer,
+		clog_token_real,
+	} type;
+	union clog_utoken
 	{
 		struct String
 		{
@@ -31,7 +41,6 @@ struct Token
 	} value;
 };
 
-void token_destroy(struct Token* token);
-
+void clog_parser(void* lemon_parser, int type, struct clog_token_t* tok, struct clog_parser_t* parser);
 
 #endif /* TOKENIZER_H_ */

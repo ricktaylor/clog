@@ -1,19 +1,37 @@
 
-%name parse
+%name clog_parser
 
 %include 
 {
-#include "tokenizer.h"
-#include <assert.h> 
+	#include "tokenizer.h"
+	#include <assert.h> 
+	
+	#define realloc(A,B) clog_realloc(A,B)
+	#define free(A) clog_free(A)
+	
+	#define YYNOERRORRECOVERY
 }
 
-%token_prefix CLOG_
-%token_type { struct Token }
-%token_destructor { token_destroy(&$$); (void)param; }
+%token_prefix CLOG_TOKEN_
+%token_type { struct clog_token_t* }
+%token_destructor 
+{ 
+	(void)parser;
+	if ($$)
+	{
+		if ($$->type == clog_token_string && $$->value.string.str)
+			clog_free($$->value.string.str);
+	
+		clog_free($$);
+	}
+}
 
-%extra_argument { void* param }
+%extra_argument { struct clog_parser_t* parser }
+%parse_failure { parser->failed = 1; }
 
 %start_symbol program
+
+%stack_size 0
 
 program ::= statements.
 
@@ -24,14 +42,9 @@ statement ::= dangling_if.
 statement ::= not_dangling_if.
 
 /* If's just make the grammar horrible
-
-http://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else
-
+ * http://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else
  */
-
-not_dangling_if ::= DO statement WHILE OPEN_PAREN expression CLOSE_PAREN.
-not_dangling_if ::= expression SEMI_COLON.
-not_dangling_if ::= OPEN_BRACE statements CLOSE_BRACE. 
+not_dangling_if ::= simple_statement.
 not_dangling_if ::= IF OPEN_PAREN expression CLOSE_PAREN not_dangling_if ELSE not_dangling_if.
 not_dangling_if ::= WHILE OPEN_PAREN expression CLOSE_PAREN not_dangling_if.
 not_dangling_if ::= FOR OPEN_PAREN expression SEMI_COLON expression SEMI_COLON expression CLOSE_PAREN not_dangling_if.
@@ -41,4 +54,13 @@ dangling_if ::= IF OPEN_PAREN expression CLOSE_PAREN not_dangling_if ELSE dangli
 dangling_if ::= WHILE OPEN_PAREN expression CLOSE_PAREN dangling_if.
 dangling_if ::= FOR OPEN_PAREN expression SEMI_COLON expression SEMI_COLON expression CLOSE_PAREN dangling_if.
 
+simple_statement ::= DO statement WHILE OPEN_PAREN expression CLOSE_PAREN.
+simple_statement ::= expression SEMI_COLON.
+simple_statement ::= OPEN_BRACE statements CLOSE_BRACE. 
+
 expression ::= STRING.
+expression ::= number.
+expression ::= IDENTIFIER.
+
+number ::= FLOAT.
+number ::= INTEGER.
