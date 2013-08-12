@@ -15,86 +15,102 @@
 		
 	# UTF-8 validation
 	utf8_cont = 0x80..0xBF;
-    utf8_one_byte = 0x00..0x7F;
-    utf8_two_byte_basic      = (0xC0..0xDF) utf8_cont;
-    utf8_two_byte_overlong   = (0xC0..0xC1) utf8_cont;
-    utf8_two_byte            = utf8_two_byte_basic - utf8_two_byte_overlong;
-    utf8_three_byte_basic    = (0xE0..0xEF) utf8_cont{2};
-    utf8_three_byte_overlong = 0xE0 (0x80..0x9F) utf8_cont;
-    utf8_three_byte_reserved = 0xED (0xA0..0xBF) utf8_cont;  # U+D800 to U+DFFF
-    utf8_three_byte          = utf8_three_byte_basic - utf8_three_byte_overlong - utf8_three_byte_reserved;
-    utf8_four_byte_basic     = (0xF0..0xF4) utf8_cont{3};
-    utf8_four_byte_overlong  = 0xF0 (0x80..0x8F) utf8_cont{2};
-    utf8_four_byte_reserved  = 0xF4 (0x90..0xBF) utf8_cont{2};    # > U+10FFFF
-    utf8_four_byte           = utf8_four_byte_basic - utf8_four_byte_overlong - utf8_four_byte_reserved;
-    utf8_char                = (utf8_one_byte | utf8_two_byte | utf8_three_byte | utf8_four_byte);
-    
-    # All characters with C0, C1 and continuation characters removed
-    char = utf8_char - ((0x00..0x1F) | 0x7F | (0xC2 (0x80..0x9F)) | (0xEF 0xBF 0xBE) | (0xEF 0xBF 0xBF));
-        
-    LF = ('\n' | ('\r\n') | (0xC2 0x85)) @{ ++parser->line; };
-    tab = '\t';
-    whitespace = tab | ' ' | LF;
-    backslash  = 0x5C;
-                
-    comment       = '//' (char | tab)* LF;
-    multi_comment = '/*' ((char | tab | LF)* -- '*/') '*/' @err{ printf("Unclosed comment\n"); err = -1; };
-    
-    escape      = '"' | backslash | 't' | 'r' | 'n' | ('u' xdigit{4});
-    unescaped   = char - ('"' | backslash);
-    string_char = unescaped | (backslash escape);
-    string      = '"' string_char* '"' @err{ printf("Missing \" at line %lu\n",parser->line); err = -1; };
-    
-    exponent = ('e' | 'E') ('+' | '-')? digit+;
-        
-    main := |*
-    	whitespace;  
-    	comment;
-    	multi_comment;
-    	
-    	string => { err = push_string(parser,ts+1,(te-ts)-2); };
-    	
-    	'0' | ([1-9] digit*)               => { err = push_integer(parser,ts,te-ts,10); };
-    	'0x' xdigit+                       => { err = push_integer(parser,ts+2,(te-ts)-2,16); };
-    	'0' [0-7]+                         => { err = push_integer(parser,ts+1,(te-ts)-1,8); };
-    	"'" ([0x20..0x7E] - backslash) "'" => { err = push_int(parser,*(ts+1)); }; # ASCII char codes
-    	"'" backslash "''"                 => { err = push_int(parser,'\''); };    # ASCII(')
-    	
-    	digit+ '.' digit+ exponent?  => { err = push_float(parser,ts,te-ts); };
-    	digit+ exponent?             => { err = push_float(parser,ts,te-ts); };
-    	    	
-    	'{' => { push_token(parser,CLOG_TOKEN_OPEN_BRACE); };
-    	'}' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACE); };
-    	'(' => { push_token(parser,CLOG_TOKEN_OPEN_PAREN); };
-    	')' => { push_token(parser,CLOG_TOKEN_CLOSE_PAREN); };
-    	';' => { push_token(parser,CLOG_TOKEN_SEMI_COLON); };
-    	
-    	'==';
-    	'!=';
-    	'<';
-    	'<=';
-    	'>';
-    	'>=';
-    	'<=>';
-    	
-    	'='; 
-    	':=';
-    	
-    	'if'    => { push_token(parser,CLOG_TOKEN_IF); };
-    	'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
-    	'while' => { push_token(parser,CLOG_TOKEN_WHILE); };
-    	'do'    => { push_token(parser,CLOG_TOKEN_DO); };
-    	'for'   => { push_token(parser,CLOG_TOKEN_FOR); };
-    	
-    	'null';
-    	'true';
-    	'false';
-    	
-    	# This is last, so everything above matches first
-    	[A-Za-z_] [A-Za-z0-9_]* => { err = push_identifier(parser,ts,te-ts); };
-    *|;
-        
-    dump := string_char;
+	utf8_one_byte = 0x00..0x7F;
+	utf8_two_byte_basic      = (0xC0..0xDF) utf8_cont;
+	utf8_two_byte_overlong   = (0xC0..0xC1) utf8_cont;
+	utf8_two_byte            = utf8_two_byte_basic - utf8_two_byte_overlong;
+	utf8_three_byte_basic    = (0xE0..0xEF) utf8_cont{2};
+	utf8_three_byte_overlong = 0xE0 (0x80..0x9F) utf8_cont;
+	utf8_three_byte_reserved = 0xED (0xA0..0xBF) utf8_cont;  # U+D800 to U+DFFF
+	utf8_three_byte          = utf8_three_byte_basic - utf8_three_byte_overlong - utf8_three_byte_reserved;
+	utf8_four_byte_basic     = (0xF0..0xF4) utf8_cont{3};
+	utf8_four_byte_overlong  = 0xF0 (0x80..0x8F) utf8_cont{2};
+	utf8_four_byte_reserved  = 0xF4 (0x90..0xBF) utf8_cont{2};    # > U+10FFFF
+	utf8_four_byte           = utf8_four_byte_basic - utf8_four_byte_overlong - utf8_four_byte_reserved;
+	utf8_char                = (utf8_one_byte | utf8_two_byte | utf8_three_byte | utf8_four_byte);
+	
+	# All characters with C0, C1 and continuation characters removed
+	char = utf8_char - ((0x00..0x1F) | 0x7F | (0xC2 (0x80..0x9F)) | (0xEF 0xBF 0xBE) | (0xEF 0xBF 0xBF));
+	    
+	LF = ('\n' | ('\r\n') | (0xC2 0x85)) @{ ++parser->line; };
+	tab = '\t';
+	whitespace = tab | ' ' | LF;
+	backslash  = 0x5C;
+	            
+	comment       = '//' (char | tab)* LF;
+	multi_comment = '/*' ((char | tab | LF)* -- '*/') '*/' @err{ printf("Unclosed comment\n"); err = -1; };
+	
+	escape      = '"' | backslash | 't' | 'r' | 'n' | ('u' xdigit{4});
+	unescaped   = char - ('"' | backslash);
+	string_char = unescaped | (backslash escape);
+	string      = '"' string_char* '"' @err{ printf("Missing \" at line %lu\n",parser->line); err = -1; };
+	
+	exponent = ('e' | 'E') ('+' | '-')? digit+;
+	    
+	main := |*
+		whitespace;  
+		comment;
+		multi_comment;
+		
+		string => { err = push_string(parser,ts+1,(te-ts)-2); };
+		
+		'0' | ([1-9] digit*)               => { err = push_integer(parser,ts,te-ts,10); };
+		'0x' xdigit+                       => { err = push_integer(parser,ts+2,(te-ts)-2,16); };
+		'0' [0-7]+                         => { err = push_integer(parser,ts+1,(te-ts)-1,8); };
+		"'" ([0x20..0x7E] - backslash) "'" => { err = push_int(parser,*(ts+1)); }; # ASCII char codes
+		"'" backslash "''"                 => { err = push_int(parser,'\''); };    # ASCII(')
+		
+		digit+ '.' digit+ exponent?  => { err = push_float(parser,ts,te-ts); };
+		digit+ exponent?             => { err = push_float(parser,ts,te-ts); };
+		    	
+		'{' => { push_token(parser,CLOG_TOKEN_OPEN_BRACE); };
+		'}' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACE); };
+		'(' => { push_token(parser,CLOG_TOKEN_OPEN_PAREN); };
+		')' => { push_token(parser,CLOG_TOKEN_CLOSE_PAREN); };
+		'[';
+		']';
+		
+		';' => { push_token(parser,CLOG_TOKEN_SEMI_COLON); };
+		
+		'==';
+		'!=';
+		'<';
+		'<=';
+		'>';
+		'>=';
+		'<=>';
+		
+		'='; 
+		':=';
+		
+		'if'    => { push_token(parser,CLOG_TOKEN_IF); };
+		'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
+		'while' => { push_token(parser,CLOG_TOKEN_WHILE); };
+		'do'    => { push_token(parser,CLOG_TOKEN_DO); };
+		'for'   => { push_token(parser,CLOG_TOKEN_FOR); };
+		
+		'var';
+		'const';
+		'function';
+		'enum';
+		'class';
+		'extends';
+		'uses';
+		'goal';
+		'public';
+		'protected';
+		'private';
+		'static';
+		    	
+		'null';
+		'true';
+		'false';
+		
+		# This is last, so everything above matches first
+		[A-Za-z_] [A-Za-z0-9_]* => { err = push_identifier(parser,ts,te-ts); };
+	*|;
+	    
+	dump := string_char;
 	
 }%%
 
