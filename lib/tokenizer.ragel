@@ -12,9 +12,7 @@
 %%{
 	machine clog;
 	alphtype unsigned char;
-	
-	action newline { ++parser->line; }
-	
+		
 	# UTF-8 validation
 	utf8_cont = 0x80..0xBF;
     utf8_one_byte = 0x00..0x7F;
@@ -34,20 +32,18 @@
     # All characters with C0, C1 and continuation characters removed
     char = utf8_char - ((0x00..0x1F) | 0x7F | (0xC2 (0x80..0x9F)) | (0xEF 0xBF 0xBE) | (0xEF 0xBF 0xBF));
         
-    LF = ('\n' | ("\r\n") | (0xC2 0x85)) @newline;
+    LF = ('\n' | ('\r\n') | (0xC2 0x85)) @{ ++parser->line; };
     tab = '\t';
     whitespace = tab | ' ' | LF;
     backslash  = 0x5C;
                 
     comment       = '//' (char | tab)* LF;
-    multi_comment =  '/*' ((char | tab | LF)* -- '*/') '*/';
+    multi_comment = '/*' ((char | tab | LF)* -- '*/') '*/' @err{ printf("Unclosed comment\n"); err = -1; };
     
-    non_quote = char* -- (backslash '"' | '"');
-    
+    escape      = '"' | backslash | 't' | 'r' | 'n' | ('u' xdigit{4});
     unescaped   = char - ('"' | backslash);
-    escape      = '"' | backslash | 't' | 'r' | 'n' | ( 'u' xdigit{4} );
     string_char = unescaped | (backslash escape);
-    string      = '"' string_char* '"';
+    string      = '"' string_char* '"' @err{ printf("Missing \" at line %lu\n",parser->line); err = -1; };
     
     exponent = ('e' | 'E') ('+' | '-')? digit+;
         
@@ -56,22 +52,33 @@
     	comment;
     	multi_comment;
     	
-    	string => { if ((err = push_string(parser,ts+1,(te-ts)-2)) != 0) fbreak; };
+    	string => { err = push_string(parser,ts+1,(te-ts)-2); };
     	
-    	'0' | ([1-9] digit*)               => { if ((err = push_integer(parser,ts,te-ts,10)) != 0) fbreak; };
-    	'0x' xdigit+                       => { if ((err = push_integer(parser,ts+2,(te-ts)-2,16)) != 0) fbreak; };
-    	'0' [0-7]+                         => { if ((err = push_integer(parser,ts+1,(te-ts)-1,8)) != 0) fbreak; };
-    	"'" ([0x20..0x7E] - backslash) "'" => { if ((err = push_int(parser,*(ts+1))) != 0) fbreak; }; # ASCII char codes
-    	"'" backslash "''"                 => { if ((err = push_int(parser,'\'')) != 0) fbreak; };    # ASCII(')
+    	'0' | ([1-9] digit*)               => { err = push_integer(parser,ts,te-ts,10); };
+    	'0x' xdigit+                       => { err = push_integer(parser,ts+2,(te-ts)-2,16); };
+    	'0' [0-7]+                         => { err = push_integer(parser,ts+1,(te-ts)-1,8); };
+    	"'" ([0x20..0x7E] - backslash) "'" => { err = push_int(parser,*(ts+1)); }; # ASCII char codes
+    	"'" backslash "''"                 => { err = push_int(parser,'\''); };    # ASCII(')
     	
-    	digit+ '.' digit+ exponent?  => { if ((err = push_float(parser,ts,te-ts)) != 0) fbreak; };
-    	digit+ exponent?             => { if ((err = push_float(parser,ts,te-ts)) != 0) fbreak; };
+    	digit+ '.' digit+ exponent?  => { err = push_float(parser,ts,te-ts); };
+    	digit+ exponent?             => { err = push_float(parser,ts,te-ts); };
     	    	
     	'{' => { push_token(parser,CLOG_TOKEN_OPEN_BRACE); };
     	'}' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACE); };
     	'(' => { push_token(parser,CLOG_TOKEN_OPEN_PAREN); };
     	')' => { push_token(parser,CLOG_TOKEN_CLOSE_PAREN); };
     	';' => { push_token(parser,CLOG_TOKEN_SEMI_COLON); };
+    	
+    	'==';
+    	'!=';
+    	'<';
+    	'<=';
+    	'>';
+    	'>=';
+    	'<=>';
+    	
+    	'='; 
+    	':=';
     	
     	'if'    => { push_token(parser,CLOG_TOKEN_IF); };
     	'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
@@ -84,7 +91,7 @@
     	'false';
     	
     	# This is last, so everything above matches first
-    	[A-Za-z_] [A-Za_z0-9_]* => { if ((err = push_identifier(parser,ts,te-ts)) != 0) fbreak; };
+    	[A-Za-z_] [A-Za-z0-9_]* => { err = push_identifier(parser,ts,te-ts); };
     *|;
         
     dump := string_char;
@@ -436,6 +443,16 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 				break;
 		}
 		
+		if (err || parser->failed || cs >= %%{ write first_final; }%%)
+			break;
+			
+		if (cs == %%{ write error; }%% || (p == eof && cs < %%{write first_final; }%%))
+		{
+			printf("Syntax error at line %lu\n",parser->line);
+			err = -1;
+			break;
+		}		
+		
 		p = buffer;
 		if (ts)
 		{
@@ -463,11 +480,5 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 	
 	clog_free(buffer);
 	
-	if (!err && !parser->failed && cs < %%{ write first_final; }%%)
-	{
-		printf("*** Error ***\n");
-		err = -1;
-	}
-		
 	return err;
 }

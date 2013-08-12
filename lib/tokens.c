@@ -7,6 +7,8 @@
 
 #include "tokenizer.h"
 
+#include <stdio.h>
+
 int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, void* parser);
 
 void* clog_parserAlloc(void* (*)(size_t));

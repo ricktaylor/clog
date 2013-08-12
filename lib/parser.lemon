@@ -27,7 +27,7 @@
 }
 
 %extra_argument { struct clog_parser_t* parser }
-%parse_failure { parser->failed = 1; }
+%parse_failure { printf("DEAD\n"); parser->failed = 1; }
 
 %start_symbol program
 
