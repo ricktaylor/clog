@@ -36,7 +36,7 @@ struct clog_token_t
 			size_t len;
 			unsigned char* str;
 		} string;
-		unsigned long integer;
+		long integer;
 		double real;
 	} value;
 };
