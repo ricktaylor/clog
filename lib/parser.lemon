@@ -8,8 +8,6 @@
 	
 	#define realloc(A,B) clog_realloc(A,B)
 	#define free(A) clog_free(A)
-	
-	#define YYNOERRORRECOVERY
 }
 
 %token_prefix CLOG_TOKEN_
@@ -33,10 +31,10 @@
 
 %stack_size 0
 
-program ::= statements.
+program ::= statement_list.
 
-statements ::= statements statement.
-statements ::= statement.
+statement_list ::= statement.
+statement_list ::= statement_list statement.
 
 statement ::= dangling_if.
 statement ::= not_dangling_if.
@@ -45,22 +43,175 @@ statement ::= not_dangling_if.
  * http://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else
  */
 not_dangling_if ::= simple_statement.
-not_dangling_if ::= IF OPEN_PAREN expression CLOSE_PAREN not_dangling_if ELSE not_dangling_if.
-not_dangling_if ::= WHILE OPEN_PAREN expression CLOSE_PAREN not_dangling_if.
-not_dangling_if ::= FOR OPEN_PAREN expression SEMI_COLON expression SEMI_COLON expression CLOSE_PAREN not_dangling_if.
+not_dangling_if ::= IF OPEN_PAREN condition CLOSE_PAREN not_dangling_if ELSE not_dangling_if.
+not_dangling_if ::= WHILE OPEN_PAREN condition CLOSE_PAREN not_dangling_if.
+not_dangling_if ::= for_statement not_dangling_if.
 
-dangling_if ::= IF OPEN_PAREN expression CLOSE_PAREN statement.
-dangling_if ::= IF OPEN_PAREN expression CLOSE_PAREN not_dangling_if ELSE dangling_if.
-dangling_if ::= WHILE OPEN_PAREN expression CLOSE_PAREN dangling_if.
-dangling_if ::= FOR OPEN_PAREN expression SEMI_COLON expression SEMI_COLON expression CLOSE_PAREN dangling_if.
+dangling_if ::= IF OPEN_PAREN condition CLOSE_PAREN statement.
+dangling_if ::= IF OPEN_PAREN condition CLOSE_PAREN not_dangling_if ELSE dangling_if.
+dangling_if ::= WHILE OPEN_PAREN condition CLOSE_PAREN dangling_if.
+dangling_if ::= for_statement dangling_if.
+
+for_statement ::= FOR OPEN_PAREN for_init_statement condition SEMI_COLON expression CLOSE_PAREN.
+for_statement ::= FOR OPEN_PAREN for_init_statement condition SEMI_COLON CLOSE_PAREN.
+for_statement ::= FOR OPEN_PAREN for_init_statement SEMI_COLON expression CLOSE_PAREN.
+
+for_init_statement ::= expression_statement.
+for_init_statement ::= declaration.
+
+condition ::= expression.
+condition ::= VAR ID ASSIGN initializer.
 
 simple_statement ::= DO statement WHILE OPEN_PAREN expression CLOSE_PAREN.
-simple_statement ::= expression SEMI_COLON.
-simple_statement ::= OPEN_BRACE statements CLOSE_BRACE. 
+simple_statement ::= expression_statement.
+simple_statement ::= compound_statement.
+simple_statement ::= try_block.
+simple_statement ::= declaration.
 
-expression ::= STRING.
-expression ::= number.
-expression ::= IDENTIFIER.
+expression_statement ::= expression SEMI_COLON.
+expression_statement ::= SEMI_COLON.
 
-number ::= FLOAT.
-number ::= INTEGER.
+compound_statement ::= OPEN_BRACE CLOSE_BRACE.
+compound_statement ::= OPEN_BRACE statement_list CLOSE_BRACE.
+
+try_block ::= TRY compound_statement handler_list.
+
+handler_list ::= handler_list handler.
+handler_list ::= handler.
+
+handler ::= CATCH OPEN_PAREN exception_declaration CLOSE_PAREN compound_statement.
+
+exception_declaration ::= ELIPSIS.
+
+declaration ::= VAR init_declarator_list SEMI_COLON. 
+
+init_declarator_list ::= init_declarator.
+init_declarator_list ::= init_declarator_list COMMA init_declarator.
+
+init_declarator ::= ID ASSIGN initializer.
+init_declarator ::= ID.
+
+initializer ::= OPEN_BRACE CLOSE_BRACE.
+initializer ::= OPEN_BRACE table_initializer_list CLOSE_BRACE.
+initializer ::= OPEN_BRACKET CLOSE_BRACKET.
+initializer ::= OPEN_BRACKET expression_list CLOSE_BRACKET.
+initializer ::= FUNCTION OPEN_PAREN fn_params CLOSE_PAREN compound_statement.
+initializer ::= assignment_expression.
+
+table_initializer_list ::= table_initializer_list COMMA table_initializer.
+table_initializer_list ::= table_initializer.
+
+table_initializer ::= ID ASSIGN initializer.
+table_initializer ::= STRING COLON initializer.
+table_initializer ::= OPEN_BRACKET expression_list CLOSE_BRACKET ASSIGN initializer.
+
+fn_params ::= fn_param_list COMMA ELIPSIS.
+fn_params ::= fn_param_list.
+ 
+fn_param_list ::= fn_param_list COMMA fn_param.
+fn_param_list ::= fn_param.
+
+fn_param ::= VAR ID ASSIGN initializer.
+fn_param ::= VAR ID.
+fn_param ::= ID ASSIGN initializer.
+fn_param ::= ID.
+
+expression_list ::= assignment_expression.
+expression_list ::= expression_list COMMA assignment_expression.
+
+expression ::= assignment_expression.
+expression ::= expression COMMA assignment_expression.
+
+assignment_expression ::= conditional_expression.
+assignment_expression ::= throw_expression.
+assignment_expression ::= unary_expression ASSIGN assignment_expression.
+assignment_expression ::= unary_expression COLON_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression MULTIPLY_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression DIVIDE_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression MOD_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression PLUS_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression MINUS_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression RIGHT_SHIFT_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression LEFT_SHIFT_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression BITWISE_AND_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression BITWISE_XOR_ASSIGN assignment_expression.
+assignment_expression ::= unary_expression BITWISE_OR_ASSIGN assignment_expression.
+
+throw_expression ::= THROW.
+throw_expression ::= THROW assignment_expression.
+
+conditional_expression ::= logical_OR_expression.
+conditional_expression ::= logical_OR_expression QUESTION expression COLON conditional_expression.
+
+logical_OR_expression ::= logical_AND_expression.
+logical_OR_expression ::= logical_OR_expression OR logical_AND_expression.
+
+logical_AND_expression ::= inclusive_OR_expression.
+logical_AND_expression ::= logical_AND_expression AND inclusive_OR_expression.
+
+inclusive_OR_expression ::= exclusive_OR_expression.
+inclusive_OR_expression ::= inclusive_OR_expression BITWISE_OR exclusive_OR_expression.
+
+exclusive_OR_expression ::= bitwise_AND_expression.
+exclusive_OR_expression ::= exclusive_OR_expression XOR bitwise_AND_expression.
+
+bitwise_AND_expression ::= equality_expression.
+bitwise_AND_expression ::= bitwise_AND_expression BITWISE_AND equality_expression.
+
+equality_expression ::= relational_expression.
+equality_expression ::= equality_expression EQUALS relational_expression.
+equality_expression ::= equality_expression NOT_EQUALS relational_expression.    
+
+relational_expression ::= shift_expression.
+relational_expression ::= relational_expression LESS_THAN shift_expression.
+relational_expression ::= relational_expression GREATER_THAN shift_expression. 
+relational_expression ::= relational_expression LESS_THAN_EQUALS shift_expression.
+relational_expression ::= relational_expression GREATER_THAN_EQUALS shift_expression.
+
+shift_expression ::= additive_expression.
+shift_expression ::= shift_expression LEFT_SHIFT additive_expression.
+shift_expression ::= shift_expression RIGHT_SHIFT additive_expression.
+
+additive_expression ::= multiplicative_expression.
+additive_expression ::= additive_expression PLUS multiplicative_expression.
+additive_expression ::= additive_expression MINUS multiplicative_expression.
+
+multiplicative_expression ::= unary_expression.
+multiplicative_expression ::= multiplicative_expression MULTIPLY unary_expression.
+multiplicative_expression ::= multiplicative_expression DIVIDE unary_expression.
+multiplicative_expression ::= multiplicative_expression MOD unary_expression.  
+
+unary_expression ::= postfix_expression.
+unary_expression ::= DOUBLE_PLUS unary_expression.
+unary_expression ::= DOUBLE_MINUS unary_expression.
+unary_expression ::= PLUS unary_expression.
+unary_expression ::= MINUS unary_expression.
+unary_expression ::= NOT unary_expression.
+unary_expression ::= TILDA unary_expression.
+
+postfix_expression ::= primary_expression.
+postfix_expression ::= postfix_expression OPEN_BRACKET expression CLOSE_BRACKET.
+postfix_expression ::= postfix_expression OPEN_PAREN CLOSE_PAREN.
+postfix_expression ::= postfix_expression OPEN_PAREN expression_list CLOSE_PAREN.
+postfix_expression ::= postfix_expression DOT ID.
+postfix_expression ::= postfix_expression DOUBLE_PLUS. 
+postfix_expression ::= postfix_expression DOUBLE_MINUS.
+postfix_expression ::= TYPEOF OPEN_PAREN expression CLOSE_PAREN.
+
+primary_expression ::= literal.
+primary_expression ::= THIS.
+primary_expression ::= OPEN_PAREN expression CLOSE_PAREN.
+primary_expression ::= id_expression.
+
+id_expression ::= ID.
+id_expression ::= qualified_id.
+
+qualified_id ::= DOUBLE_COLON ID.
+qualified_id ::= id_expression DOUBLE_COLON ID.
+
+literal ::= INTEGER.
+literal ::= FLOAT.
+literal ::= STRING.
+literal ::= TRUE.
+literal ::= FALSE.
+literal ::= NULL.

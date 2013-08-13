@@ -67,10 +67,14 @@
 		'}' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACE); };
 		'(' => { push_token(parser,CLOG_TOKEN_OPEN_PAREN); };
 		')' => { push_token(parser,CLOG_TOKEN_CLOSE_PAREN); };
-		'[';
-		']';
+		'[' => { push_token(parser,CLOG_TOKEN_OPEN_BRACKET); };
+		']' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACKET); };
 		
+		'.' ;# => { push_token(parser,CLOG_TOKEN_DOT); };
+		',' => { push_token(parser,CLOG_TOKEN_COMMA); };
 		';' => { push_token(parser,CLOG_TOKEN_SEMI_COLON); };
+		':' => { push_token(parser,CLOG_TOKEN_COLON); };
+		'...' => { push_token(parser,CLOG_TOKEN_ELIPSIS); };
 		
 		'==';
 		'!=';
@@ -80,8 +84,8 @@
 		'>=';
 		'<=>';
 		
-		'='; 
-		':=';
+		'='  => { push_token(parser,CLOG_TOKEN_ASSIGN); };
+		':=' ;# => { push_token(parser,CLOG_TOKEN_COLON_ASSIGN); };
 		
 		'if'    => { push_token(parser,CLOG_TOKEN_IF); };
 		'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
@@ -274,7 +278,7 @@ static int push_identifier(struct clog_parser_t* parser, const unsigned char* sz
 	tok->value.string.len = len;
 	tok->value.string.str = str;
 	
-	clog_parser(parser->lemon_parser,CLOG_TOKEN_IDENTIFIER,tok,parser);
+	clog_parser(parser->lemon_parser,CLOG_TOKEN_ID,tok,parser);
 	
 	return 0;
 }
@@ -415,7 +419,7 @@ static int push_float(struct clog_parser_t* parser, const unsigned char* sz, siz
 	tok->type = clog_token_real;
 	tok->value.real = d;
 	
-	clog_parser(parser->lemon_parser,CLOG_TOKEN_INTEGER,tok,parser);
+	clog_parser(parser->lemon_parser,CLOG_TOKEN_FLOAT,tok,parser);
 	
 	return 0;
 }
