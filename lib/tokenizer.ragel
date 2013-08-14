@@ -69,33 +69,65 @@
 		')' => { push_token(parser,CLOG_TOKEN_CLOSE_PAREN); };
 		'[' => { push_token(parser,CLOG_TOKEN_OPEN_BRACKET); };
 		']' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACKET); };
-		
-		'.' ;# => { push_token(parser,CLOG_TOKEN_DOT); };
+		'.' => { push_token(parser,CLOG_TOKEN_DOT); };
 		',' => { push_token(parser,CLOG_TOKEN_COMMA); };
 		';' => { push_token(parser,CLOG_TOKEN_SEMI_COLON); };
 		':' => { push_token(parser,CLOG_TOKEN_COLON); };
+		'?' => { push_token(parser,CLOG_TOKEN_QUESTION); };
 		'...' => { push_token(parser,CLOG_TOKEN_ELIPSIS); };
-		
-		'==';
-		'!=';
-		'<';
-		'<=';
-		'>';
-		'>=';
-		'<=>';
-		
+		'||' => { push_token(parser,CLOG_TOKEN_OR); };
+		'&&' => { push_token(parser,CLOG_TOKEN_AND); };
+		'|' => { push_token(parser,CLOG_TOKEN_BAR); };
+		'^' => { push_token(parser,CLOG_TOKEN_CARET); };
+		'&' => { push_token(parser,CLOG_TOKEN_AMPERSAND); };
+		'==' => { push_token(parser,CLOG_TOKEN_EQUALS); };
+		'!=' => { push_token(parser,CLOG_TOKEN_NOT_EQUALS); };
+		'<' => { push_token(parser,CLOG_TOKEN_LESS_THAN); };
+		'<=' => { push_token(parser,CLOG_TOKEN_LESS_THAN_EQUALS); };
+		'>' => { push_token(parser,CLOG_TOKEN_GREATER_THAN); };
+		'>=' => { push_token(parser,CLOG_TOKEN_GREATER_THAN_EQUALS); };
 		'='  => { push_token(parser,CLOG_TOKEN_ASSIGN); };
-		':=' ;# => { push_token(parser,CLOG_TOKEN_COLON_ASSIGN); };
+		':=' => { push_token(parser,CLOG_TOKEN_COLON_ASSIGN); };
+		'*=' => { push_token(parser,CLOG_TOKEN_STAR_ASSIGN); };
+		'/=' => { push_token(parser,CLOG_TOKEN_SLASH_ASSIGN); };
+		'%=' => { push_token(parser,CLOG_TOKEN_PERCENT_ASSIGN); };
+		'+=' => { push_token(parser,CLOG_TOKEN_PLUS_ASSIGN); };
+		'-=' => { push_token(parser,CLOG_TOKEN_MINUS_ASSIGN); };
+		'>>=' => { push_token(parser,CLOG_TOKEN_RIGHT_SHIFT_ASSIGN); };
+		'<<=' => { push_token(parser,CLOG_TOKEN_LEFT_SHIFT_ASSIGN); };
+		'&=' => { push_token(parser,CLOG_TOKEN_AMPERSAND_ASSIGN); };
+		'^=' => { push_token(parser,CLOG_TOKEN_BITWISE_CARET_ASSIGN); };
+		'|=' => { push_token(parser,CLOG_TOKEN_BAR_ASSIGN); };
+		'<<' => { push_token(parser,CLOG_TOKEN_LEFT_SHIFT); };
+		'>>' => { push_token(parser,CLOG_TOKEN_RIGHT_SHIFT); };
+		'+' => { push_token(parser,CLOG_TOKEN_PLUS); };
+		'-' => { push_token(parser,CLOG_TOKEN_MINUS); };
+		'*' => { push_token(parser,CLOG_TOKEN_STAR); };
+		'/' => { push_token(parser,CLOG_TOKEN_SLASH); };
+		'%' => { push_token(parser,CLOG_TOKEN_PERCENT); };
+		'++' => { push_token(parser,CLOG_TOKEN_DOUBLE_PLUS); };
+		'--' => { push_token(parser,CLOG_TOKEN_DOUBLE_MINUS); };
+		'!' => { push_token(parser,CLOG_TOKEN_EXCLAMATION); };
+		'~' => { push_token(parser,CLOG_TOKEN_TILDA); };
+		'::' => { push_token(parser,CLOG_TOKEN_DOUBLE_COLON); };
 		
 		'if'    => { push_token(parser,CLOG_TOKEN_IF); };
 		'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
 		'while' => { push_token(parser,CLOG_TOKEN_WHILE); };
 		'do'    => { push_token(parser,CLOG_TOKEN_DO); };
 		'for'   => { push_token(parser,CLOG_TOKEN_FOR); };
+		'var'   => { push_token(parser,CLOG_TOKEN_VAR); };
+		'throw' => { push_token(parser,CLOG_TOKEN_THROW); };
+		'try'   => { push_token(parser,CLOG_TOKEN_TRY); };
+		'catch' => { push_token(parser,CLOG_TOKEN_CATCH); };
+		'function' => { push_token(parser,CLOG_TOKEN_FUNCTION); };
+		'typeof' => { push_token(parser,CLOG_TOKEN_TYPEOF); };
+		'this' => { push_token(parser,CLOG_TOKEN_THIS); };
+		'base' => { push_token(parser,CLOG_TOKEN_BASE); };
+		'null' => { push_token(parser,CLOG_TOKEN_NULL); };
+		'true' => { push_token(parser,CLOG_TOKEN_TRUE); };
+		'false' => { push_token(parser,CLOG_TOKEN_FALSE); };
 		
-		'var';
-		'const';
-		'function';
 		'enum';
 		'class';
 		'extends';
@@ -105,11 +137,7 @@
 		'protected';
 		'private';
 		'static';
-		    	
-		'null';
-		'true';
-		'false';
-		
+				
 		# This is last, so everything above matches first
 		[A-Za-z_] [A-Za-z0-9_]* => { err = push_identifier(parser,ts,te-ts); };
 	*|;
