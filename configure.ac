@@ -49,6 +49,8 @@ AS_IF([test "x$oo_test_CFLAGS" != "xset"],
   ],[
     AX_APPEND_COMPILE_FLAGS([-O2],[CFLAGS])
   ])
+  
+  AX_APPEND_COMPILE_FLAGS([-ansi],[CFLAGS])
 
   AS_CASE([$host_os],
     [mingw*],[AX_APPEND_COMPILE_FLAGS([-march=i686 -mtune=native],[CFLAGS])]

@@ -4,9 +4,10 @@
 #include <float.h>
 #include <math.h>
 
-#include <lib/tokenizer.h>
+#include <lib/ast.h>
 #include <lib/parser.h>
 
+/* Remove this when we drop the printf statements */
 #include <stdio.h>
 
 %%{
@@ -109,7 +110,7 @@
 		'--' => { push_token(parser,CLOG_TOKEN_DOUBLE_MINUS); };
 		'!' => { push_token(parser,CLOG_TOKEN_EXCLAMATION); };
 		'~' => { push_token(parser,CLOG_TOKEN_TILDA); };
-		'::' => { push_token(parser,CLOG_TOKEN_DOUBLE_COLON); };
+	#	'::' => { push_token(parser,CLOG_TOKEN_DOUBLE_COLON); };
 		
 		'if'    => { push_token(parser,CLOG_TOKEN_IF); };
 		'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
@@ -121,9 +122,7 @@
 		'try'   => { push_token(parser,CLOG_TOKEN_TRY); };
 		'catch' => { push_token(parser,CLOG_TOKEN_CATCH); };
 		'function' => { push_token(parser,CLOG_TOKEN_FUNCTION); };
-		'typeof' => { push_token(parser,CLOG_TOKEN_TYPEOF); };
-		'this' => { push_token(parser,CLOG_TOKEN_THIS); };
-		'base' => { push_token(parser,CLOG_TOKEN_BASE); };
+	#	'typeof' => { push_token(parser,CLOG_TOKEN_TYPEOF); };
 		'null' => { push_token(parser,CLOG_TOKEN_NULL); };
 		'true' => { push_token(parser,CLOG_TOKEN_TRUE); };
 		'false' => { push_token(parser,CLOG_TOKEN_FALSE); };
@@ -137,9 +136,12 @@
 		'protected';
 		'private';
 		'static';
+		
+		'this' => { push_token_text(parser,CLOG_TOKEN_THIS,ts,te-ts); };
+		'base' => { push_token_text(parser,CLOG_TOKEN_BASE,ts,te-ts); };
 				
 		# This is last, so everything above matches first
-		[A-Za-z_] [A-Za-z0-9_]* => { err = push_identifier(parser,ts,te-ts); };
+		[A-Za-z_] [A-Za-z0-9_]* => { err = push_token_text(parser,CLOG_TOKEN_ID,ts,te-ts); };
 	*|;
 	    
 	dump := string_char;
@@ -148,7 +150,7 @@
 
 %% write data;
 
-static void push_token(struct clog_parser_t* parser, unsigned int type)
+static void push_token(struct clog_parser* parser, unsigned int type)
 {
 	clog_parser(parser->lemon_parser,type,NULL,parser);
 }
@@ -212,62 +214,66 @@ static size_t append_unicode(unsigned char* dest, const unsigned char* src)
     return len;
 }
 
-static int push_string(struct clog_parser_t* parser, const unsigned char* sz, size_t len)
+static int push_string(struct clog_parser* parser, const unsigned char* sz, size_t len)
 {
 	size_t i,j;
-	struct clog_token_t* tok = NULL;
-	unsigned char* str = clog_malloc(len+1);
-	if (!str)
-		return -1;
-		
-	for (i=0,j=0; i < len; ++i)
+	struct clog_token* tok = NULL;
+	unsigned char* str = NULL;
+	if (len)
 	{
-		if (sz[i] != '\\')
-			str[j++] = sz[i]; 
-		else
+		str = clog_malloc(len+1);
+		if (!str)
+			return -1;
+			
+		for (i=0,j=0; i < len; ++i)
 		{
-			switch (sz[++i])
+			if (sz[i] != '\\')
+				str[j++] = sz[i]; 
+			else
 			{
-			case '\\':
-				str[j++] = '\\';
-				break;
-				
-			case 't':
-				str[j++] = '\t';
-				break;
-				
-			case 'n':
-				str[j++] = '\n';
-				break;
-				
-			case 'r':
-				str[j++] = '\r';
-				break;
-				
-			case '"':
-				str[j++] = '"';
-				break;
-				
-			case 'u':
-				len = append_unicode(str+j,sz+i+1);
-				if (!len)
+				switch (sz[++i])
 				{
+				case '\\':
+					str[j++] = '\\';
+					break;
+					
+				case 't':
+					str[j++] = '\t';
+					break;
+					
+				case 'n':
+					str[j++] = '\n';
+					break;
+					
+				case 'r':
+					str[j++] = '\r';
+					break;
+					
+				case '"':
+					str[j++] = '"';
+					break;
+					
+				case 'u':
+					len = append_unicode(str+j,sz+i+1);
+					if (!len)
+					{
+						clog_free(str);
+						return -1;
+					}
+					j += len;
+					i += 4;
+					break;
+									
+				default:
 					clog_free(str);
 					return -1;
 				}
-				j += len;
-				i += 4;
-				break;
-								
-			default:
-				clog_free(str);
-				return -1;
 			}
 		}
+		
+		len = j;
+		str[len] = 0;
 	}
-	
-	len = j;
-	str[len] = 0;
 	
 	tok = clog_malloc(sizeof(*tok));
 	if (!tok)
@@ -285,9 +291,9 @@ static int push_string(struct clog_parser_t* parser, const unsigned char* sz, si
 	return 0;
 }
 
-static int push_identifier(struct clog_parser_t* parser, const unsigned char* sz, size_t len)
+static int push_token_text(struct clog_parser* parser, unsigned int type, const unsigned char* sz, size_t len)
 {
-	struct clog_token_t* tok = NULL;
+	struct clog_token* tok = NULL;
 	unsigned char* str = clog_malloc(len+1);
 	if (!str)
 		return -1;
@@ -306,14 +312,14 @@ static int push_identifier(struct clog_parser_t* parser, const unsigned char* sz
 	tok->value.string.len = len;
 	tok->value.string.str = str;
 	
-	clog_parser(parser->lemon_parser,CLOG_TOKEN_ID,tok,parser);
+	clog_parser(parser->lemon_parser,type,tok,parser);
 	
 	return 0;
 }
 
-static int push_int(struct clog_parser_t* parser, long v)
+static int push_int(struct clog_parser* parser, long v)
 {
-	struct clog_token_t* tok = clog_malloc(sizeof(*tok));
+	struct clog_token* tok = clog_malloc(sizeof(*tok));
 	if (!tok)
 		return -1; 
 		
@@ -325,7 +331,7 @@ static int push_int(struct clog_parser_t* parser, long v)
 	return 0;
 }
 
-static int push_integer(struct clog_parser_t* parser, const unsigned char* sz, size_t len, unsigned int base)
+static int push_integer(struct clog_parser* parser, const unsigned char* sz, size_t len, unsigned int base)
 {
 	long value = 0;
 	size_t i;
@@ -389,9 +395,9 @@ static double fast_pow10(int exp)
 	return fast_pow10(m) * fast_pow10(exp-m);
 }
 
-static int push_float(struct clog_parser_t* parser, const unsigned char* sz, size_t len)
+static int push_float(struct clog_parser* parser, const unsigned char* sz, size_t len)
 {
-	struct clog_token_t* tok;
+	struct clog_token* tok;
 	double d = 0.0;
 	size_t i = 0;
 	int exp = 0;
@@ -452,7 +458,7 @@ static int push_float(struct clog_parser_t* parser, const unsigned char* sz, siz
 	return 0;
 }
 
-int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser_t* parser)
+int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser* parser)
 {
 	unsigned int cs;
 	unsigned int act;

@@ -24,7 +24,7 @@ bin_PROGRAMS = clog
 clog_SOURCES = \
 	lib/parser.lemon \
 	lib/tokenizer.ragel \
-	lib/tokens.c \
+	lib/ast.c \
 	bin/clog.c
 
 ####################################
