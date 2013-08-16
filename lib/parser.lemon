@@ -118,14 +118,18 @@ parameter ::= ID.
 fn_default_param ::= ID AMPERSAND ASSIGN initializer.
 fn_default_param ::= ID ASSIGN initializer.
 
-expression_list ::= assignment_expression.
-expression_list ::= expression_list COMMA assignment_expression.
+%type expression_list              { struct clog_ast_expression_list* }
+%destructor expression_list        { clog_ast_expression_list_free(parser,$$); }
+expression_list(A) ::= assignment_expression(B).                          { clog_ast_expression_list_alloc(parser,&A,B); }
+expression_list(A) ::= expression_list(B) COMMA assignment_expression(C). { clog_ast_expression_list_append(parser,B,C); A = B; }
 
-%type expression              { struct clog_ast_expression* }
-%destructor expression        { clog_ast_expression_free(parser,$$); }
-expression ::= assignment_expression.
-expression ::= expression COMMA assignment_expression.
+%type expression                            { struct clog_ast_expression* }
+%destructor expression                      { clog_ast_expression_free(parser,$$); }
+expression(A) ::= assignment_expression(B). { A = B; }
+expression(A) ::= expression(B) COMMA assignment_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_COMMA,B,C); }
 
+%type assignment_expression              { struct clog_ast_expression* }
+%destructor assignment_expression        { clog_ast_expression_free(parser,$$); }
 assignment_expression ::= conditional_expression.
 assignment_expression ::= throw_expression.
 assignment_expression ::= logical_OR_expression ASSIGN assignment_expression.
@@ -141,79 +145,93 @@ assignment_expression ::= logical_OR_expression AMPERSAND_ASSIGN assignment_expr
 assignment_expression ::= logical_OR_expression BITWISE_CARET_ASSIGN assignment_expression.
 assignment_expression ::= logical_OR_expression BAR_ASSIGN assignment_expression.
 
-throw_expression ::= THROW.
-throw_expression ::= THROW assignment_expression.
+%type throw_expression                                  { struct clog_ast_expression* }
+%destructor throw_expression                            { clog_ast_expression_free(parser,$$); }
+throw_expression(A) ::= THROW.                          { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_THROW,NULL); }
+throw_expression(A) ::= THROW assignment_expression(B). { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_THROW,B); }
 
-conditional_expression ::= logical_OR_expression.
-conditional_expression ::= logical_OR_expression QUESTION expression COLON conditional_expression.
+%type conditional_expression                            { struct clog_ast_expression* }
+%destructor conditional_expression                      { clog_ast_expression_free(parser,$$); }
+conditional_expression(A) ::= logical_OR_expression(B). { A = B; }
+conditional_expression(A) ::= logical_OR_expression(B) QUESTION expression(C) COLON conditional_expression(D). { clog_ast_expression_alloc_builtin3(parser,&A,CLOG_TOKEN_QUESTION,B,C,D); }
 
-logical_OR_expression ::= logical_AND_expression.
-logical_OR_expression ::= logical_OR_expression OR logical_AND_expression.
+%type logical_OR_expression                             { struct clog_ast_expression* }
+%destructor logical_OR_expression                       { clog_ast_expression_free(parser,$$); }
+logical_OR_expression(A) ::= logical_AND_expression(B). { A = B; }
+logical_OR_expression(A) ::= logical_OR_expression(B) OR logical_AND_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_OR,B,C); }
 
-logical_AND_expression ::= inclusive_OR_expression.
-logical_AND_expression ::= logical_AND_expression AND inclusive_OR_expression.
+%type logical_AND_expression                              { struct clog_ast_expression* }
+%destructor logical_AND_expression                        { clog_ast_expression_free(parser,$$); }
+logical_AND_expression(A) ::= inclusive_OR_expression(B). { A = B; }
+logical_AND_expression(A) ::= logical_AND_expression(B) AND inclusive_OR_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_AND,B,C); }
 
-inclusive_OR_expression ::= exclusive_OR_expression.
-inclusive_OR_expression ::= inclusive_OR_expression BAR exclusive_OR_expression.
+%type inclusive_OR_expression                              { struct clog_ast_expression* }
+%destructor inclusive_OR_expression                        { clog_ast_expression_free(parser,$$); }
+inclusive_OR_expression(A) ::= exclusive_OR_expression(B). { A = B; }
+inclusive_OR_expression(A) ::= inclusive_OR_expression(B) BAR exclusive_OR_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_BAR,B,C); }
 
-exclusive_OR_expression ::= bitwise_AND_expression.
-exclusive_OR_expression ::= exclusive_OR_expression CARET bitwise_AND_expression.
+%type exclusive_OR_expression                             { struct clog_ast_expression* }
+%destructor exclusive_OR_expression                       { clog_ast_expression_free(parser,$$); }
+exclusive_OR_expression(A) ::= bitwise_AND_expression(B). { A = B; }
+exclusive_OR_expression(A) ::= exclusive_OR_expression(B) CARET bitwise_AND_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_CARET,B,C); }
 
-bitwise_AND_expression ::= equality_expression.
-bitwise_AND_expression ::= bitwise_AND_expression AMPERSAND equality_expression.
+%type bitwise_AND_expression                          { struct clog_ast_expression* }
+%destructor bitwise_AND_expression                    { clog_ast_expression_free(parser,$$); }
+bitwise_AND_expression(A) ::= equality_expression(B). { A = B; }
+bitwise_AND_expression(A) ::= bitwise_AND_expression(B) AMPERSAND equality_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_AMPERSAND,B,C); }
 
 %type equality_expression                                { struct clog_ast_expression* }
 %destructor equality_expression                          { clog_ast_expression_free(parser,$$); }
 equality_expression(A) ::= relational_expression(B).     { A = B; }
-equality_expression(A) ::= equality_expression(B) EQUALS relational_expression(C).     { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_EQUALS,B,C); }
-equality_expression(A) ::= equality_expression(B) NOT_EQUALS relational_expression(C). { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_NOT_EQUALS,B,C); }
+equality_expression(A) ::= equality_expression(B) EQUALS relational_expression(C).     { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_EQUALS,B,C); }
+equality_expression(A) ::= equality_expression(B) NOT_EQUALS relational_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_NOT_EQUALS,B,C); }
 
 %type relational_expression                                { struct clog_ast_expression* }
 %destructor relational_expression                          { clog_ast_expression_free(parser,$$); }
 relational_expression(A) ::= shift_expression(B).          { A = B; }
-relational_expression(A) ::= relational_expression(B) LESS_THAN shift_expression(C).           { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_LESS_THAN,B,C); }
-relational_expression(A) ::= relational_expression(B) GREATER_THAN shift_expression(C).        { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_GREATER_THAN,B,C); }
-relational_expression(A) ::= relational_expression(B) LESS_THAN_EQUALS shift_expression(C).    { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_LESS_THAN_EQUALS,B,C); }
-relational_expression(A) ::= relational_expression(B) GREATER_THAN_EQUALS shift_expression(C). { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_GREATER_THAN_EQUALS,B,C); }
+relational_expression(A) ::= relational_expression(B) LESS_THAN shift_expression(C).           { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_LESS_THAN,B,C); }
+relational_expression(A) ::= relational_expression(B) GREATER_THAN shift_expression(C).        { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_GREATER_THAN,B,C); }
+relational_expression(A) ::= relational_expression(B) LESS_THAN_EQUALS shift_expression(C).    { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_LESS_THAN_EQUALS,B,C); }
+relational_expression(A) ::= relational_expression(B) GREATER_THAN_EQUALS shift_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_GREATER_THAN_EQUALS,B,C); }
 
 %type shift_expression                                { struct clog_ast_expression* }
 %destructor shift_expression                          { clog_ast_expression_free(parser,$$); }
 shift_expression(A) ::= additive_expression(B).       { A = B; }
-shift_expression(A) ::= shift_expression(B) LEFT_SHIFT additive_expression(C).  { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_LEFT_SHIFT,B,C); }
-shift_expression(A) ::= shift_expression(B) RIGHT_SHIFT additive_expression(C). { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_RIGHT_SHIFT,B,C); }
+shift_expression(A) ::= shift_expression(B) LEFT_SHIFT additive_expression(C).  { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_LEFT_SHIFT,B,C); }
+shift_expression(A) ::= shift_expression(B) RIGHT_SHIFT additive_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_RIGHT_SHIFT,B,C); }
 
 %type additive_expression                                { struct clog_ast_expression* }
 %destructor additive_expression                          { clog_ast_expression_free(parser,$$); }
 additive_expression(A) ::= multiplicative_expression(B). { A = B; }
-additive_expression(A) ::= additive_expression(B) PLUS multiplicative_expression(C).  { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_PLUS,B,C); }
-additive_expression(A) ::= additive_expression(B) MINUS multiplicative_expression(C). { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_MINUS,B,C); }
+additive_expression(A) ::= additive_expression(B) PLUS multiplicative_expression(C).  { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_PLUS,B,C); }
+additive_expression(A) ::= additive_expression(B) MINUS multiplicative_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_MINUS,B,C); }
 
 %type multiplicative_expression                       { struct clog_ast_expression* }
 %destructor multiplicative_expression                 { clog_ast_expression_free(parser,$$); }
 multiplicative_expression(A) ::= unary_expression(B). { A = B; }
-multiplicative_expression(A) ::= multiplicative_expression(B) STAR unary_expression(C).    { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_STAR,B,C); }
-multiplicative_expression(A) ::= multiplicative_expression(B) SLASH unary_expression(C).   { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_SLASH,B,C); }
-multiplicative_expression(A) ::= multiplicative_expression(B) PERCENT unary_expression(C). { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_PERCENT,B,C); }
+multiplicative_expression(A) ::= multiplicative_expression(B) STAR unary_expression(C).    { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_STAR,B,C); }
+multiplicative_expression(A) ::= multiplicative_expression(B) SLASH unary_expression(C).   { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_SLASH,B,C); }
+multiplicative_expression(A) ::= multiplicative_expression(B) PERCENT unary_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_PERCENT,B,C); }
 
 %type unary_expression                         { struct clog_ast_expression* }
 %destructor unary_expression                   { clog_ast_expression_free(parser,$$); }
 unary_expression(A) ::= postfix_expression(B). { A = B; }
-unary_expression(A) ::= DOUBLE_PLUS unary_expression(B).  { clog_ast_expression_alloc_preincdec(parser,&A,CLOG_TOKEN_DOUBLE_PLUS,B); }
-unary_expression(A) ::= DOUBLE_MINUS unary_expression(B). { clog_ast_expression_alloc_preincdec(parser,&A,CLOG_TOKEN_DOUBLE_MINUS,B); }
-unary_expression(A) ::= PLUS unary_expression(B).         { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_PLUS,B,NULL); }
-unary_expression(A) ::= MINUS unary_expression(B).        { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_MINUS,B,NULL); }
-unary_expression(A) ::= EXCLAMATION unary_expression(B).  { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_EXCLAMATION,B,NULL); }
-unary_expression(A) ::= TILDA unary_expression(B).        { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_TILDA,B,NULL); }
+unary_expression(A) ::= DOUBLE_PLUS unary_expression(B).  { clog_ast_expression_alloc_builtin_lvalue(parser,&A,CLOG_TOKEN_DOUBLE_PLUS,B,NULL); }
+unary_expression(A) ::= DOUBLE_MINUS unary_expression(B). { clog_ast_expression_alloc_builtin_lvalue(parser,&A,CLOG_TOKEN_DOUBLE_MINUS,B,NULL); }
+unary_expression(A) ::= PLUS unary_expression(B).         { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_PLUS,B); }
+unary_expression(A) ::= MINUS unary_expression(B).        { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_MINUS,B); }
+unary_expression(A) ::= EXCLAMATION unary_expression(B).  { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_EXCLAMATION,B); }
+unary_expression(A) ::= TILDA unary_expression(B).        { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_TILDA,B); }
 
 %type postfix_expression                         { struct clog_ast_expression* }
 %destructor postfix_expression                   { clog_ast_expression_free(parser,$$); }
 postfix_expression(A) ::= primary_expression(B). { A = B; }
-postfix_expression ::= postfix_expression OPEN_BRACKET expression CLOSE_BRACKET.
-postfix_expression ::= postfix_expression OPEN_PAREN CLOSE_PAREN.
-postfix_expression ::= postfix_expression OPEN_PAREN expression_list CLOSE_PAREN.
-postfix_expression ::= postfix_expression DOT ID.
-postfix_expression(A) ::= postfix_expression(B) DOUBLE_PLUS.  { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_DOUBLE_PLUS,B,NULL); }
-postfix_expression(A) ::= postfix_expression(B) DOUBLE_MINUS. { clog_ast_expression_alloc_builtin(parser,&A,CLOG_TOKEN_DOUBLE_MINUS,B,NULL); }
+postfix_expression(A) ::= postfix_expression(B) OPEN_BRACKET expression(C) CLOSE_BRACKET.  { clog_ast_expression_alloc_builtin_lvalue(parser,&A,CLOG_TOKEN_OPEN_BRACKET,B,C); }
+postfix_expression(A) ::= postfix_expression(B) OPEN_PAREN CLOSE_PAREN.                    { clog_ast_expression_alloc_call(parser,&A,B,NULL); }
+postfix_expression(A) ::= postfix_expression(B) OPEN_PAREN expression_list(C) CLOSE_PAREN. { clog_ast_expression_alloc_call(parser,&A,B,C); }
+postfix_expression(A) ::= postfix_expression(B) DOT ID(C).    { clog_ast_expression_alloc_dot(parser,&A,B,C); }       
+postfix_expression(A) ::= postfix_expression(B) DOUBLE_PLUS.  { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_DOUBLE_PLUS,B); }
+postfix_expression(A) ::= postfix_expression(B) DOUBLE_MINUS. { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_DOUBLE_MINUS,B); }
 
 /* Not sure...
 postfix_expression(A) ::= TYPEOF OPEN_PAREN expression(B) CLOSE_PAREN. { clog_ast_expression_alloc_unary(parser,&A,clog_ast_expression_unary_typeof,B); }
@@ -234,7 +252,8 @@ id_expression(A) ::= ID(B). { clog_ast_expression_alloc_id(parser,&A,B); }
 /* Not sure...
 id_expression ::= qualified_id.
 qualified_id ::= DOUBLE_COLON ID.
-qualified_id ::= id_expression DOUBLE_COLON ID.*/
+qualified_id ::= id_expression DOUBLE_COLON ID.
+*/
 
 %type literal              { struct clog_ast_literal* }
 %destructor literal        { clog_ast_literal_free(parser,$$); }
@@ -248,4 +267,4 @@ literal(A) ::= NULL.       { clog_ast_literal_alloc(parser,&A,NULL); }
 %type string                       { struct clog_ast_literal* }
 %destructor string                 { clog_ast_literal_free(parser,$$); }
 string(A) ::= STRING(B).           { clog_ast_literal_alloc(parser,&A,B); }
-string(A) ::= string(B) STRING(C). { clog_ast_literal_append_string(parser,&A,B,C); }
+string(A) ::= string(B) STRING(C). { A = clog_ast_literal_append_string(parser,B,C); }

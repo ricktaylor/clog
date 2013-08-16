@@ -7,9 +7,6 @@
 #include <lib/ast.h>
 #include <lib/parser.h>
 
-/* Remove this when we drop the printf statements */
-#include <stdio.h>
-
 %%{
 	machine clog;
 	alphtype unsigned char;
@@ -39,12 +36,12 @@
 	backslash  = 0x5C;
 	            
 	comment       = '//' (char | tab)* LF;
-	multi_comment = '/*' ((char | tab | LF)* -- '*/') '*/' @err{ printf("Unclosed comment\n"); err = -1; };
+	multi_comment = '/*' ((char | tab | LF)* -- '*/') '*/' @err{ clog_syntax_error(parser,"Unclosed comment"); };
 	
 	escape      = '"' | backslash | 't' | 'r' | 'n' | ('u' xdigit{4});
 	unescaped   = char - ('"' | backslash);
 	string_char = unescaped | (backslash escape);
-	string      = '"' string_char* '"' @err{ printf("Missing \" at line %lu\n",parser->line); err = -1; };
+	string      = '"' string_char* '"' @err{ clog_syntax_error(parser,"Missing \""); };
 	
 	exponent = ('e' | 'E') ('+' | '-')? digit+;
 	    
@@ -53,16 +50,16 @@
 		comment;
 		multi_comment;
 		
-		string => { err = push_string(parser,ts+1,(te-ts)-2); };
+		string => { push_string(parser,ts+1,(te-ts)-2); };
 		
-		'0' | ([1-9] digit*)               => { err = push_integer(parser,ts,te-ts,10); };
-		'0x' xdigit+                       => { err = push_integer(parser,ts+2,(te-ts)-2,16); };
-		'0' [0-7]+                         => { err = push_integer(parser,ts+1,(te-ts)-1,8); };
-		"'" ([0x20..0x7E] - backslash) "'" => { err = push_int(parser,*(ts+1)); }; # ASCII char codes
-		"'" backslash "''"                 => { err = push_int(parser,'\''); };    # ASCII(')
+		'0' | ([1-9] digit*)               => { push_integer(parser,ts,te-ts,10); };
+		'0x' xdigit+                       => { push_integer(parser,ts+2,(te-ts)-2,16); };
+		'0' [0-7]+                         => { push_integer(parser,ts+1,(te-ts)-1,8); };
+		"'" ([0x20..0x7E] - backslash) "'" => { push_int(parser,*(ts+1)); }; # ASCII char codes
+		"'" backslash "''"                 => { push_int(parser,'\''); };    # ASCII(')
 		
-		digit+ '.' digit+ exponent?  => { err = push_float(parser,ts,te-ts); };
-		digit+ exponent?             => { err = push_float(parser,ts,te-ts); };
+		digit+ '.' digit+ exponent?  => { push_float(parser,ts,te-ts); };
+		digit+ exponent?             => { push_float(parser,ts,te-ts); };
 		    	
 		'{' => { push_token(parser,CLOG_TOKEN_OPEN_BRACE); };
 		'}' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACE); };
@@ -141,7 +138,7 @@
 		'base' => { push_token_text(parser,CLOG_TOKEN_BASE,ts,te-ts); };
 				
 		# This is last, so everything above matches first
-		[A-Za-z_] [A-Za-z0-9_]* => { err = push_token_text(parser,CLOG_TOKEN_ID,ts,te-ts); };
+		[A-Za-z_] [A-Za-z0-9_]* => { push_token_text(parser,CLOG_TOKEN_ID,ts,te-ts); };
 	*|;
 	    
 	dump := string_char;
@@ -214,7 +211,7 @@ static size_t append_unicode(unsigned char* dest, const unsigned char* src)
     return len;
 }
 
-static int push_string(struct clog_parser* parser, const unsigned char* sz, size_t len)
+static void push_string(struct clog_parser* parser, const unsigned char* sz, size_t len)
 {
 	size_t i,j;
 	struct clog_token* tok = NULL;
@@ -223,7 +220,7 @@ static int push_string(struct clog_parser* parser, const unsigned char* sz, size
 	{
 		str = clog_malloc(len+1);
 		if (!str)
-			return -1;
+			return clog_out_of_memory(parser);
 			
 		for (i=0,j=0; i < len; ++i)
 		{
@@ -258,7 +255,7 @@ static int push_string(struct clog_parser* parser, const unsigned char* sz, size
 					if (!len)
 					{
 						clog_free(str);
-						return -1;
+						return clog_syntax_error(parser,"Invalid unicode value");
 					}
 					j += len;
 					i += 4;
@@ -266,7 +263,7 @@ static int push_string(struct clog_parser* parser, const unsigned char* sz, size
 									
 				default:
 					clog_free(str);
-					return -1;
+					return clog_syntax_error(parser,"Invalid character escape");
 				}
 			}
 		}
@@ -279,7 +276,7 @@ static int push_string(struct clog_parser* parser, const unsigned char* sz, size
 	if (!tok)
 	{
 		clog_free(str);
-		return -1; 
+		return clog_out_of_memory(parser);
 	}
 	
 	tok->type = clog_token_string;
@@ -287,16 +284,14 @@ static int push_string(struct clog_parser* parser, const unsigned char* sz, size
 	tok->value.string.str = str;
 	
 	clog_parser(parser->lemon_parser,CLOG_TOKEN_STRING,tok,parser);
-	
-	return 0;
 }
 
-static int push_token_text(struct clog_parser* parser, unsigned int type, const unsigned char* sz, size_t len)
+static void push_token_text(struct clog_parser* parser, unsigned int type, const unsigned char* sz, size_t len)
 {
 	struct clog_token* tok = NULL;
 	unsigned char* str = clog_malloc(len+1);
 	if (!str)
-		return -1;
+		return clog_out_of_memory(parser);
 		
 	memcpy(str,sz,len);
 	str[len] = 0;
@@ -305,7 +300,7 @@ static int push_token_text(struct clog_parser* parser, unsigned int type, const 
 	if (!tok)
 	{
 		clog_free(str);
-		return -1; 
+		return clog_out_of_memory(parser);
 	}
 	
 	tok->type = clog_token_string;
@@ -313,25 +308,21 @@ static int push_token_text(struct clog_parser* parser, unsigned int type, const 
 	tok->value.string.str = str;
 	
 	clog_parser(parser->lemon_parser,type,tok,parser);
-	
-	return 0;
 }
 
-static int push_int(struct clog_parser* parser, long v)
+static void push_int(struct clog_parser* parser, long v)
 {
 	struct clog_token* tok = clog_malloc(sizeof(*tok));
 	if (!tok)
-		return -1; 
+		return clog_out_of_memory(parser); 
 		
 	tok->type = clog_token_integer;
 	tok->value.integer = v;
 	
 	clog_parser(parser->lemon_parser,CLOG_TOKEN_INTEGER,tok,parser);
-	
-	return 0;
 }
 
-static int push_integer(struct clog_parser* parser, const unsigned char* sz, size_t len, unsigned int base)
+static void push_integer(struct clog_parser* parser, const unsigned char* sz, size_t len, unsigned int base)
 {
 	long value = 0;
 	size_t i;
@@ -352,13 +343,13 @@ static int push_integer(struct clog_parser* parser, const unsigned char* sz, siz
 		{
 			value = value * base;
 			if (value > LONG_MAX - c)
-				return -1;
+				return clog_syntax_error(parser,"Value out of range");
 		}
 		else
-			return -1;
+			return clog_syntax_error(parser,"Value out of range");
 	}
 	
-	return push_int(parser,value);
+	push_int(parser,value);
 }
 
 static double fast_pow10(int exp)
@@ -395,7 +386,7 @@ static double fast_pow10(int exp)
 	return fast_pow10(m) * fast_pow10(exp-m);
 }
 
-static int push_float(struct clog_parser* parser, const unsigned char* sz, size_t len)
+static void push_float(struct clog_parser* parser, const unsigned char* sz, size_t len)
 {
 	struct clog_token* tok;
 	double d = 0.0;
@@ -438,24 +429,22 @@ static int push_float(struct clog_parser* parser, const unsigned char* sz, size_
 	}
 	
 	if (exp < DBL_MIN_10_EXP || exp > DBL_MAX_10_EXP)
-		return -1;
+		return clog_syntax_error(parser,"Exponent value out of range");
 		
 	if (exp)
 		d *= fast_pow10(exp);
 	
 	if (d == HUGE_VAL)
-		return -1;
+		return clog_syntax_error(parser,"Value out of range");
 	
 	tok = clog_malloc(sizeof(*tok));
 	if (!tok)
-		return -1; 
+		return clog_out_of_memory(parser); 
 		
 	tok->type = clog_token_real;
 	tok->value.real = d;
 	
 	clog_parser(parser->lemon_parser,CLOG_TOKEN_FLOAT,tok,parser);
-	
-	return 0;
 }
 
 int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser* parser)
@@ -469,19 +458,22 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 	unsigned char* te;
 	size_t buffer_size = 1024;
 	int err = 0;
-	
+		
 	%% write init;
 		
 	buffer = clog_malloc(buffer_size);
 	if (!buffer)
+	{
+		clog_out_of_memory(parser);
 		return -1;
+	}
 		
 	for (p = buffer;!err && !eof && !parser->failed;)
 	{
 		const unsigned char* pe;
 		ptrdiff_t space = buffer_size - (p - buffer);
 		size_t read = space;
-		
+				
 		if ((err = (*rd_fn)(rd_param,p,&read)) != 0)
 			break;
 		
@@ -497,16 +489,15 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 				break;
 		}
 		
-		if (err || parser->failed || cs >= %%{ write first_final; }%%)
+		if (cs >= %%{ write first_final; }%%)
 			break;
-			
-		if (cs == %%{ write error; }%% || (p == eof && cs < %%{write first_final; }%%))
-		{
-			printf("Syntax error at line %lu\n",parser->line);
-			err = -1;
+					
+		if (cs == %%{ write error; }%% || p == eof)
+			clog_syntax_error(parser,"Unexpected end of file");
+				
+		if (parser->failed)
 			break;
-		}		
-		
+				
 		p = buffer;
 		if (ts)
 		{
@@ -516,7 +507,7 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 				unsigned char* new_buffer = clog_realloc(buffer,buffer_size * 2);
 				if (!new_buffer)
 				{
-					err = -1;
+					clog_out_of_memory(parser);
 					break;
 				}
 					
@@ -533,6 +524,9 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 	}
 	
 	clog_free(buffer);
+	
+	if (!err && parser->failed)
+		err = -1;
 	
 	return err;
 }
