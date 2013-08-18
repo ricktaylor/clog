@@ -128,10 +128,10 @@ expression_list(A) ::= expression_list(B) COMMA assignment_expression(C). { clog
 expression(A) ::= assignment_expression(B). { A = B; }
 expression(A) ::= expression(B) COMMA assignment_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_COMMA,B,C); }
 
-%type assignment_expression              { struct clog_ast_expression* }
-%destructor assignment_expression        { clog_ast_expression_free(parser,$$); }
-assignment_expression ::= conditional_expression.
-assignment_expression ::= throw_expression.
+%type assignment_expression                             { struct clog_ast_expression* }
+%destructor assignment_expression                       { clog_ast_expression_free(parser,$$); }
+assignment_expression(A) ::= conditional_expression(B). { A = B; }
+assignment_expression(A) ::= throw_expression(B).       { A = B; }
 assignment_expression ::= logical_OR_expression ASSIGN assignment_expression.
 assignment_expression ::= logical_OR_expression COLON_ASSIGN assignment_expression.
 assignment_expression ::= logical_OR_expression STAR_ASSIGN assignment_expression.
@@ -242,18 +242,8 @@ postfix_expression(A) ::= TYPEOF OPEN_PAREN expression(B) CLOSE_PAREN. { clog_as
 primary_expression(A) ::= literal(B). { clog_ast_expression_alloc_literal(parser,&A,B); }
 primary_expression(A) ::= THIS(B).    { clog_ast_expression_alloc_id(parser,&A,B); }
 primary_expression(A) ::= BASE(B).    { clog_ast_expression_alloc_id(parser,&A,B); }
+primary_expression(A) ::= ID(B).      { clog_ast_expression_alloc_id(parser,&A,B); }
 primary_expression(A) ::= OPEN_PAREN expression(B) CLOSE_PAREN. { A = B; }
-primary_expression(A) ::= id_expression(B).                     { A = B; }
-
-%type id_expression         { struct clog_ast_expression* }
-%destructor id_expression   { clog_ast_expression_free(parser,$$); }
-id_expression(A) ::= ID(B). { clog_ast_expression_alloc_id(parser,&A,B); }
-
-/* Not sure...
-id_expression ::= qualified_id.
-qualified_id ::= DOUBLE_COLON ID.
-qualified_id ::= id_expression DOUBLE_COLON ID.
-*/
 
 %type literal              { struct clog_ast_literal* }
 %destructor literal        { clog_ast_literal_free(parser,$$); }
