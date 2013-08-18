@@ -107,7 +107,6 @@
 		'--' => { push_token(parser,CLOG_TOKEN_DOUBLE_MINUS); };
 		'!' => { push_token(parser,CLOG_TOKEN_EXCLAMATION); };
 		'~' => { push_token(parser,CLOG_TOKEN_TILDA); };
-	#	'::' => { push_token(parser,CLOG_TOKEN_DOUBLE_COLON); };
 		
 		'if'    => { push_token(parser,CLOG_TOKEN_IF); };
 		'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
