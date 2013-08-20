@@ -90,6 +90,7 @@ struct clog_ast_expression
 	} type;
 
 	int lvalue;
+	int constant;
 
 	union clog_ast_expression_u
 	{
