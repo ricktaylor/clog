@@ -2,9 +2,10 @@ ACLOCAL_AMFLAGS = -I m4
 
 .ragel.c:
 	$(AM_V_at)$(MKDIR_P) $(@D)
-	$(AM_V_GEN)$(RAGEL) -V -M dump -p -o $@.dot $<
-	dot -Tsvg -O $@.dot
 	$(AM_V_GEN)$(RAGEL) -C -G2 -o $@ $<
+	
+#$(AM_V_GEN)$(RAGEL) -V -M dump -p -o $@.dot $<
+#dot -Tsvg -O $@.dot
 	
 .lemon.c:
 	$(AM_V_GEN)$(LEMON) -q $<

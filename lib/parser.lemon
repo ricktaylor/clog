@@ -17,32 +17,42 @@
 %token_destructor { clog_token_free(parser,$$); }
 
 %extra_argument { struct clog_parser* parser }
-%parse_failure { printf("DEAD\n"); parser->failed = 1; }
+%parse_failure { clog_syntax_error(parser,"Unexpected token"); }
 
 %start_symbol program
 
 %stack_size 0
 
-program ::= statement_list.
+%type program               { struct clog_ast_statement_list* }
+%destructor program         { clog_ast_statement_list_free(parser,$$); }
+program(A) ::= statement_list(B). { A = B; }
 
-statement_list ::= statement.
-statement_list ::= statement_list statement.
+%type statement_list              { struct clog_ast_statement_list* }
+%destructor statement_list        { clog_ast_statement_list_free(parser,$$); }
+statement_list(A) ::= statement(B).                   { A = B; }
+statement_list(A) ::= statement_list(B) statement(C). { A = clog_ast_statement_list_append(parser,B,C); }
 
-statement ::= simple_statement.
-statement ::= dangling_if.
+%type statement                       { struct clog_ast_statement_list* }
+%destructor statement                 { clog_ast_statement_list_free(parser,$$); }
+statement(A) ::= simple_statement(B). { A = B; }
+statement(A) ::= dangling_if(B).      { A = B; }
 
 /* If's just make the grammar horrible
  * http://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else
  */
+%type simple_statement                       { struct clog_ast_statement_list* }
+%destructor simple_statement                 { clog_ast_statement_list_free(parser,$$); }
 simple_statement ::= IF OPEN_PAREN condition CLOSE_PAREN simple_statement ELSE simple_statement.
 simple_statement ::= WHILE OPEN_PAREN condition CLOSE_PAREN simple_statement.
 simple_statement ::= for_statement simple_statement.
 simple_statement ::= DO statement WHILE OPEN_PAREN expression CLOSE_PAREN.
-simple_statement ::= expression_statement.
-simple_statement ::= compound_statement.
+simple_statement(A) ::= expression_statement(B). { clog_ast_statement_list_alloc(parser,&A,B); }
+simple_statement(A) ::= compound_statement(B).   { clog_ast_statement_list_alloc(parser,&A,B); }
 simple_statement ::= try_block.
 simple_statement ::= declaration_statement.
 
+%type dangling_if                       { struct clog_ast_statement_list* }
+%destructor dangling_if                 { clog_ast_statement_list_free(parser,$$); }
 dangling_if ::= IF OPEN_PAREN condition CLOSE_PAREN statement.
 dangling_if ::= IF OPEN_PAREN condition CLOSE_PAREN simple_statement ELSE dangling_if.
 dangling_if ::= WHILE OPEN_PAREN condition CLOSE_PAREN dangling_if.
@@ -52,17 +62,25 @@ for_statement ::= FOR OPEN_PAREN for_init_statement condition SEMI_COLON express
 for_statement ::= FOR OPEN_PAREN for_init_statement condition SEMI_COLON CLOSE_PAREN.
 for_statement ::= FOR OPEN_PAREN for_init_statement SEMI_COLON expression CLOSE_PAREN.
 
-for_init_statement ::= expression_statement.
-for_init_statement ::= variable_declaration.
+%type for_init_statement                       { struct clog_ast_statement_list* }
+%destructor for_init_statement                 { clog_ast_statement_list_free(parser,$$); }
+for_init_statement(A) ::= expression_statement(B). { clog_ast_statement_list_alloc(parser,&A,B); }
+for_init_statement(A) ::= variable_declaration(B). { A = B; }
 
-condition ::= expression.
-condition ::= VAR ID ASSIGN initializer.
+%type condition                       { struct clog_ast_statement_list* }
+%destructor condition                 { clog_ast_statement_list_free(parser,$$); }
+condition(A) ::= expression(B).       { clog_ast_statement_list_alloc_expression(parser,&A,B); }
+condition(A) ::= VAR ID(B) ASSIGN initializer(C). { clog_ast_statement_alloc_declaration(parser,&A,B,C); }
 
-expression_statement ::= expression SEMI_COLON.
-expression_statement ::= SEMI_COLON.
+%type expression_statement              { struct clog_ast_statement* }
+%destructor expression_statement        { clog_ast_statement_free(parser,$$); }
+expression_statement(A) ::= expression(B) SEMI_COLON. { clog_ast_statement_alloc_expression(parser,&A,B); }
+expression_statement(A) ::= SEMI_COLON.               { A = NULL; }
 
-compound_statement ::= OPEN_BRACE CLOSE_BRACE.
-compound_statement ::= OPEN_BRACE statement_list CLOSE_BRACE.
+%type compound_statement              { struct clog_ast_statement* }
+%destructor compound_statement        { clog_ast_statement_free(parser,$$); }
+compound_statement(A) ::= OPEN_BRACE CLOSE_BRACE.                   { A = NULL; }
+compound_statement(A) ::= OPEN_BRACE statement_list(B) CLOSE_BRACE. { clog_ast_statement_alloc_block(parser,&A,B); }
 
 try_block ::= TRY compound_statement handler_list.
 
@@ -74,54 +92,29 @@ handler ::= CATCH OPEN_PAREN exception_declaration CLOSE_PAREN compound_statemen
 exception_declaration ::= ELIPSIS.
 
 declaration_statement ::= variable_declaration.
-declaration_statement ::= FUNCTION ID OPEN_PAREN parameters CLOSE_PAREN compound_statement.
 
+%type variable_declaration                       { struct clog_ast_statement_list* }
+%destructor variable_declaration                 { clog_ast_statement_list_free(parser,$$); }
 variable_declaration ::= VAR init_declarator_list SEMI_COLON.
 
-init_declarator_list ::= init_declarator.
-init_declarator_list ::= init_declarator_list COMMA init_declarator.
+%type init_declarator_list                       { struct clog_ast_statement_list* }
+%destructor init_declarator_list                 { clog_ast_statement_list_free(parser,$$); }
+init_declarator_list(A) ::= init_declarator(B).  { A = B; }
+init_declarator_list(A) ::= init_declarator_list(B) COMMA init_declarator(C). { A = clog_ast_statement_list_append(parser,B,C); }
 
-init_declarator ::= ID ASSIGN initializer.
-init_declarator ::= ID.
+%type init_declarator                       { struct clog_ast_statement_list* }
+%destructor init_declarator                 { clog_ast_statement_list_free(parser,$$); }
+init_declarator(A) ::= ID(B) ASSIGN initializer(C). { clog_ast_statement_alloc_declaration(parser,&A,B,C); }
+init_declarator(A) ::= ID(B).                       { clog_ast_statement_alloc_declaration(parser,&A,B,NULL); }
 
-initializer ::= OPEN_BRACE CLOSE_BRACE.
-initializer ::= OPEN_BRACE table_initializer_list CLOSE_BRACE.
-initializer ::= OPEN_BRACKET CLOSE_BRACKET.
-initializer ::= OPEN_BRACKET expression_list CLOSE_BRACKET.
-initializer ::= FUNCTION AMPERSAND OPEN_PAREN parameters CLOSE_PAREN compound_statement.
-initializer ::= FUNCTION OPEN_PAREN parameters CLOSE_PAREN compound_statement.
-initializer ::= assignment_expression.
-
-table_initializer_list ::= table_initializer_list COMMA table_initializer.
-table_initializer_list ::= table_initializer.
-
-table_initializer ::= ID ASSIGN initializer.
-table_initializer ::= STRING COLON initializer.
-table_initializer ::= OPEN_BRACKET expression_list CLOSE_BRACKET ASSIGN initializer.
-
-parameters ::= parameter_list COMMA parameter_default_list COMMA ELIPSIS.
-parameters ::= parameter_list COMMA parameter_default_list.
-parameters ::= parameter_list COMMA ELIPSIS.
-parameters ::= parameter_list.
-parameters ::= parameter_default_list COMMA ELIPSIS.
-parameters ::= parameter_default_list.
- 
-parameter_list ::= parameter_list COMMA parameter.
-parameter_list ::= parameter.
-
-parameter_default_list ::= parameter_default_list COMMA fn_default_param.
-parameter_default_list ::= fn_default_param.
-
-parameter ::= ID AMPERSAND.
-parameter ::= ID.
-
-fn_default_param ::= ID AMPERSAND ASSIGN initializer.
-fn_default_param ::= ID ASSIGN initializer.
+%type initializer                            { struct clog_ast_expression* }
+%destructor initializer                      { clog_ast_expression_free(parser,$$); }
+initializer(A) ::= assignment_expression(B). { A = B; }
 
 %type expression_list              { struct clog_ast_expression_list* }
 %destructor expression_list        { clog_ast_expression_list_free(parser,$$); }
 expression_list(A) ::= assignment_expression(B).                          { clog_ast_expression_list_alloc(parser,&A,B); }
-expression_list(A) ::= expression_list(B) COMMA assignment_expression(C). { clog_ast_expression_list_append(parser,B,C); A = B; }
+expression_list(A) ::= expression_list(B) COMMA assignment_expression(C). { A = clog_ast_expression_list_append(parser,B,C); }
 
 %type expression                            { struct clog_ast_expression* }
 %destructor expression                      { clog_ast_expression_free(parser,$$); }
@@ -132,18 +125,18 @@ expression(A) ::= expression(B) COMMA assignment_expression(C). { clog_ast_expre
 %destructor assignment_expression                       { clog_ast_expression_free(parser,$$); }
 assignment_expression(A) ::= conditional_expression(B). { A = B; }
 assignment_expression(A) ::= throw_expression(B).       { A = B; }
-assignment_expression ::= logical_OR_expression ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression COLON_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression STAR_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression SLASH_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression PERCENT_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression PLUS_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression MINUS_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression RIGHT_SHIFT_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression LEFT_SHIFT_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression AMPERSAND_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression BITWISE_CARET_ASSIGN assignment_expression.
-assignment_expression ::= logical_OR_expression BAR_ASSIGN assignment_expression.
+assignment_expression(A) ::= logical_OR_expression(B) ASSIGN assignment_expression(C).               { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) COLON_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_COLON_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) STAR_ASSIGN assignment_expression(C).          { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_STAR_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) SLASH_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_SLASH_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) PERCENT_ASSIGN assignment_expression(C).       { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_PERCENT_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) PLUS_ASSIGN assignment_expression(C).          { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_PLUS_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) MINUS_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_MINUS_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) RIGHT_SHIFT_ASSIGN assignment_expression(C).   { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_RIGHT_SHIFT_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) LEFT_SHIFT_ASSIGN assignment_expression(C).    { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_LEFT_SHIFT_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) AMPERSAND_ASSIGN assignment_expression(C).     { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_AMPERSAND_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) BITWISE_CARET_ASSIGN assignment_expression(C). { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_BITWISE_CARET_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) BAR_ASSIGN assignment_expression(C).           { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_BAR_ASSIGN,B,C); } 
 
 %type throw_expression                                  { struct clog_ast_expression* }
 %destructor throw_expression                            { clog_ast_expression_free(parser,$$); }
@@ -233,10 +226,6 @@ postfix_expression(A) ::= postfix_expression(B) DOT ID(C).    { clog_ast_express
 postfix_expression(A) ::= postfix_expression(B) DOUBLE_PLUS.  { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_DOUBLE_PLUS,B); }
 postfix_expression(A) ::= postfix_expression(B) DOUBLE_MINUS. { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_DOUBLE_MINUS,B); }
 
-/* Not sure...
-postfix_expression(A) ::= TYPEOF OPEN_PAREN expression(B) CLOSE_PAREN. { clog_ast_expression_alloc_unary(parser,&A,clog_ast_expression_unary_typeof,B); }
-*/
-
 %type primary_expression              { struct clog_ast_expression* }
 %destructor primary_expression        { clog_ast_expression_free(parser,$$); }
 primary_expression(A) ::= literal(B). { clog_ast_expression_alloc_literal(parser,&A,B); }
@@ -258,3 +247,51 @@ literal(A) ::= NULL.       { clog_ast_literal_alloc(parser,&A,NULL); }
 %destructor string                 { clog_ast_literal_free(parser,$$); }
 string(A) ::= STRING(B).           { clog_ast_literal_alloc(parser,&A,B); }
 string(A) ::= string(B) STRING(C). { A = clog_ast_literal_append_string(parser,B,C); }
+
+
+
+/*
+%type constant_expression                             { struct clog_ast_expression* }
+%destructor constant_expression                       { clog_ast_expression_free(parser,$$); }
+constant_expression(A) ::= conditional_expression(B). { A = B; }
+*/
+
+
+/*
+
+declaration_statement ::= FUNCTION ID OPEN_PAREN parameters CLOSE_PAREN compound_statement.
+
+parameters ::= parameter_list COMMA parameter_default_list COMMA ELIPSIS.
+parameters ::= parameter_list COMMA parameter_default_list.
+parameters ::= parameter_list COMMA ELIPSIS.
+parameters ::= parameter_list.
+parameters ::= parameter_default_list COMMA ELIPSIS.
+parameters ::= parameter_default_list.
+ 
+parameter_list ::= parameter_list COMMA parameter.
+parameter_list ::= parameter.
+
+parameter_default_list ::= parameter_default_list COMMA fn_default_param.
+parameter_default_list ::= fn_default_param.
+
+parameter ::= ID AMPERSAND.
+parameter ::= ID.
+
+fn_default_param ::= ID AMPERSAND ASSIGN initializer.
+fn_default_param ::= ID ASSIGN initializer.
+
+
+initializer ::= OPEN_BRACE CLOSE_BRACE.
+initializer ::= OPEN_BRACE table_initializer_list CLOSE_BRACE.
+initializer ::= OPEN_BRACKET CLOSE_BRACKET.
+initializer ::= OPEN_BRACKET expression_list CLOSE_BRACKET.
+initializer ::= FUNCTION AMPERSAND OPEN_PAREN parameters CLOSE_PAREN compound_statement.
+initializer ::= FUNCTION OPEN_PAREN parameters CLOSE_PAREN compound_statement.
+
+table_initializer_list ::= table_initializer_list COMMA table_initializer.
+table_initializer_list ::= table_initializer.
+
+table_initializer ::= ID ASSIGN initializer.
+table_initializer ::= STRING COLON initializer.
+table_initializer ::= OPEN_BRACKET expression_list CLOSE_BRACKET ASSIGN initializer.
+*/

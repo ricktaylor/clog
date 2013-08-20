@@ -7,6 +7,8 @@
 #include <lib/ast.h>
 #include <lib/parser.h>
 
+void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_parser* parser);
+
 %%{
 	machine clog;
 	alphtype unsigned char;
@@ -50,78 +52,77 @@
 		comment;
 		multi_comment;
 		
-		string => { push_string(parser,ts+1,(te-ts)-2); };
+		string => { push_string(parser,lemon,ts+1,(te-ts)-2); };
 		
-		'0' | ([1-9] digit*)               => { push_integer(parser,ts,te-ts,10); };
-		'0x' xdigit+                       => { push_integer(parser,ts+2,(te-ts)-2,16); };
-		'0' [0-7]+                         => { push_integer(parser,ts+1,(te-ts)-1,8); };
-		"'" ([0x20..0x7E] - backslash) "'" => { push_int(parser,*(ts+1)); }; # ASCII char codes
-		"'" backslash "''"                 => { push_int(parser,'\''); };    # ASCII(')
+		'0' | ([1-9] digit*)               => { push_integer(parser,lemon,ts,te-ts,10); };
+		'0x' xdigit+                       => { push_integer(parser,lemon,ts+2,(te-ts)-2,16); };
+		'0' [0-7]+                         => { push_integer(parser,lemon,ts+1,(te-ts)-1,8); };
+		"'" ([0x20..0x7E] - backslash) "'" => { push_int(parser,lemon,*(ts+1)); }; # ASCII char codes
+		"'" backslash "''"                 => { push_int(parser,lemon,'\''); };    # ASCII(')
 		
-		digit+ '.' digit+ exponent?  => { push_float(parser,ts,te-ts); };
-		digit+ exponent?             => { push_float(parser,ts,te-ts); };
+		digit+ '.' digit+ exponent?  => { push_float(parser,lemon,ts,te-ts); };
+		digit+ exponent?             => { push_float(parser,lemon,ts,te-ts); };
 		    	
-		'{' => { push_token(parser,CLOG_TOKEN_OPEN_BRACE); };
-		'}' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACE); };
-		'(' => { push_token(parser,CLOG_TOKEN_OPEN_PAREN); };
-		')' => { push_token(parser,CLOG_TOKEN_CLOSE_PAREN); };
-		'[' => { push_token(parser,CLOG_TOKEN_OPEN_BRACKET); };
-		']' => { push_token(parser,CLOG_TOKEN_CLOSE_BRACKET); };
-		'.' => { push_token(parser,CLOG_TOKEN_DOT); };
-		',' => { push_token(parser,CLOG_TOKEN_COMMA); };
-		';' => { push_token(parser,CLOG_TOKEN_SEMI_COLON); };
-		':' => { push_token(parser,CLOG_TOKEN_COLON); };
-		'?' => { push_token(parser,CLOG_TOKEN_QUESTION); };
-		'...' => { push_token(parser,CLOG_TOKEN_ELIPSIS); };
-		'||' => { push_token(parser,CLOG_TOKEN_OR); };
-		'&&' => { push_token(parser,CLOG_TOKEN_AND); };
-		'|' => { push_token(parser,CLOG_TOKEN_BAR); };
-		'^' => { push_token(parser,CLOG_TOKEN_CARET); };
-		'&' => { push_token(parser,CLOG_TOKEN_AMPERSAND); };
-		'==' => { push_token(parser,CLOG_TOKEN_EQUALS); };
-		'!=' => { push_token(parser,CLOG_TOKEN_NOT_EQUALS); };
-		'<' => { push_token(parser,CLOG_TOKEN_LESS_THAN); };
-		'<=' => { push_token(parser,CLOG_TOKEN_LESS_THAN_EQUALS); };
-		'>' => { push_token(parser,CLOG_TOKEN_GREATER_THAN); };
-		'>=' => { push_token(parser,CLOG_TOKEN_GREATER_THAN_EQUALS); };
-		'='  => { push_token(parser,CLOG_TOKEN_ASSIGN); };
-		':=' => { push_token(parser,CLOG_TOKEN_COLON_ASSIGN); };
-		'*=' => { push_token(parser,CLOG_TOKEN_STAR_ASSIGN); };
-		'/=' => { push_token(parser,CLOG_TOKEN_SLASH_ASSIGN); };
-		'%=' => { push_token(parser,CLOG_TOKEN_PERCENT_ASSIGN); };
-		'+=' => { push_token(parser,CLOG_TOKEN_PLUS_ASSIGN); };
-		'-=' => { push_token(parser,CLOG_TOKEN_MINUS_ASSIGN); };
-		'>>=' => { push_token(parser,CLOG_TOKEN_RIGHT_SHIFT_ASSIGN); };
-		'<<=' => { push_token(parser,CLOG_TOKEN_LEFT_SHIFT_ASSIGN); };
-		'&=' => { push_token(parser,CLOG_TOKEN_AMPERSAND_ASSIGN); };
-		'^=' => { push_token(parser,CLOG_TOKEN_BITWISE_CARET_ASSIGN); };
-		'|=' => { push_token(parser,CLOG_TOKEN_BAR_ASSIGN); };
-		'<<' => { push_token(parser,CLOG_TOKEN_LEFT_SHIFT); };
-		'>>' => { push_token(parser,CLOG_TOKEN_RIGHT_SHIFT); };
-		'+' => { push_token(parser,CLOG_TOKEN_PLUS); };
-		'-' => { push_token(parser,CLOG_TOKEN_MINUS); };
-		'*' => { push_token(parser,CLOG_TOKEN_STAR); };
-		'/' => { push_token(parser,CLOG_TOKEN_SLASH); };
-		'%' => { push_token(parser,CLOG_TOKEN_PERCENT); };
-		'++' => { push_token(parser,CLOG_TOKEN_DOUBLE_PLUS); };
-		'--' => { push_token(parser,CLOG_TOKEN_DOUBLE_MINUS); };
-		'!' => { push_token(parser,CLOG_TOKEN_EXCLAMATION); };
-		'~' => { push_token(parser,CLOG_TOKEN_TILDA); };
+		'{' => { push_token(parser,lemon,CLOG_TOKEN_OPEN_BRACE); };
+		'}' => { push_token(parser,lemon,CLOG_TOKEN_CLOSE_BRACE); };
+		'(' => { push_token(parser,lemon,CLOG_TOKEN_OPEN_PAREN); };
+		')' => { push_token(parser,lemon,CLOG_TOKEN_CLOSE_PAREN); };
+		'[' => { push_token(parser,lemon,CLOG_TOKEN_OPEN_BRACKET); };
+		']' => { push_token(parser,lemon,CLOG_TOKEN_CLOSE_BRACKET); };
+		'.' => { push_token(parser,lemon,CLOG_TOKEN_DOT); };
+		',' => { push_token(parser,lemon,CLOG_TOKEN_COMMA); };
+		';' => { push_token(parser,lemon,CLOG_TOKEN_SEMI_COLON); };
+		':' => { push_token(parser,lemon,CLOG_TOKEN_COLON); };
+		'?' => { push_token(parser,lemon,CLOG_TOKEN_QUESTION); };
+		'...' => { push_token(parser,lemon,CLOG_TOKEN_ELIPSIS); };
+		'||' => { push_token(parser,lemon,CLOG_TOKEN_OR); };
+		'&&' => { push_token(parser,lemon,CLOG_TOKEN_AND); };
+		'|' => { push_token(parser,lemon,CLOG_TOKEN_BAR); };
+		'^' => { push_token(parser,lemon,CLOG_TOKEN_CARET); };
+		'&' => { push_token(parser,lemon,CLOG_TOKEN_AMPERSAND); };
+		'==' => { push_token(parser,lemon,CLOG_TOKEN_EQUALS); };
+		'!=' => { push_token(parser,lemon,CLOG_TOKEN_NOT_EQUALS); };
+		'<' => { push_token(parser,lemon,CLOG_TOKEN_LESS_THAN); };
+		'<=' => { push_token(parser,lemon,CLOG_TOKEN_LESS_THAN_EQUALS); };
+		'>' => { push_token(parser,lemon,CLOG_TOKEN_GREATER_THAN); };
+		'>=' => { push_token(parser,lemon,CLOG_TOKEN_GREATER_THAN_EQUALS); };
+		'='  => { push_token(parser,lemon,CLOG_TOKEN_ASSIGN); };
+		':=' => { push_token(parser,lemon,CLOG_TOKEN_COLON_ASSIGN); };
+		'*=' => { push_token(parser,lemon,CLOG_TOKEN_STAR_ASSIGN); };
+		'/=' => { push_token(parser,lemon,CLOG_TOKEN_SLASH_ASSIGN); };
+		'%=' => { push_token(parser,lemon,CLOG_TOKEN_PERCENT_ASSIGN); };
+		'+=' => { push_token(parser,lemon,CLOG_TOKEN_PLUS_ASSIGN); };
+		'-=' => { push_token(parser,lemon,CLOG_TOKEN_MINUS_ASSIGN); };
+		'>>=' => { push_token(parser,lemon,CLOG_TOKEN_RIGHT_SHIFT_ASSIGN); };
+		'<<=' => { push_token(parser,lemon,CLOG_TOKEN_LEFT_SHIFT_ASSIGN); };
+		'&=' => { push_token(parser,lemon,CLOG_TOKEN_AMPERSAND_ASSIGN); };
+		'^=' => { push_token(parser,lemon,CLOG_TOKEN_BITWISE_CARET_ASSIGN); };
+		'|=' => { push_token(parser,lemon,CLOG_TOKEN_BAR_ASSIGN); };
+		'<<' => { push_token(parser,lemon,CLOG_TOKEN_LEFT_SHIFT); };
+		'>>' => { push_token(parser,lemon,CLOG_TOKEN_RIGHT_SHIFT); };
+		'+' => { push_token(parser,lemon,CLOG_TOKEN_PLUS); };
+		'-' => { push_token(parser,lemon,CLOG_TOKEN_MINUS); };
+		'*' => { push_token(parser,lemon,CLOG_TOKEN_STAR); };
+		'/' => { push_token(parser,lemon,CLOG_TOKEN_SLASH); };
+		'%' => { push_token(parser,lemon,CLOG_TOKEN_PERCENT); };
+		'++' => { push_token(parser,lemon,CLOG_TOKEN_DOUBLE_PLUS); };
+		'--' => { push_token(parser,lemon,CLOG_TOKEN_DOUBLE_MINUS); };
+		'!' => { push_token(parser,lemon,CLOG_TOKEN_EXCLAMATION); };
+		'~' => { push_token(parser,lemon,CLOG_TOKEN_TILDA); };
 		
-		'if'    => { push_token(parser,CLOG_TOKEN_IF); };
-		'else'  => { push_token(parser,CLOG_TOKEN_ELSE); };
-		'while' => { push_token(parser,CLOG_TOKEN_WHILE); };
-		'do'    => { push_token(parser,CLOG_TOKEN_DO); };
-		'for'   => { push_token(parser,CLOG_TOKEN_FOR); };
-		'var'   => { push_token(parser,CLOG_TOKEN_VAR); };
-		'throw' => { push_token(parser,CLOG_TOKEN_THROW); };
-		'try'   => { push_token(parser,CLOG_TOKEN_TRY); };
-		'catch' => { push_token(parser,CLOG_TOKEN_CATCH); };
-		'function' => { push_token(parser,CLOG_TOKEN_FUNCTION); };
-	#	'typeof' => { push_token(parser,CLOG_TOKEN_TYPEOF); };
-		'null' => { push_token(parser,CLOG_TOKEN_NULL); };
-		'true' => { push_token(parser,CLOG_TOKEN_TRUE); };
-		'false' => { push_token(parser,CLOG_TOKEN_FALSE); };
+		'if'    => { push_token(parser,lemon,CLOG_TOKEN_IF); };
+		'else'  => { push_token(parser,lemon,CLOG_TOKEN_ELSE); };
+		'while' => { push_token(parser,lemon,CLOG_TOKEN_WHILE); };
+		'do'    => { push_token(parser,lemon,CLOG_TOKEN_DO); };
+		'for'   => { push_token(parser,lemon,CLOG_TOKEN_FOR); };
+		'var'   => { push_token(parser,lemon,CLOG_TOKEN_VAR); };
+		'throw' => { push_token(parser,lemon,CLOG_TOKEN_THROW); };
+		'try'   => { push_token(parser,lemon,CLOG_TOKEN_TRY); };
+		'catch' => { push_token(parser,lemon,CLOG_TOKEN_CATCH); };
+#		'function' => { push_token(parser,lemon,CLOG_TOKEN_FUNCTION); };
+		'null' => { push_token(parser,lemon,CLOG_TOKEN_NULL); };
+		'true' => { push_token(parser,lemon,CLOG_TOKEN_TRUE); };
+		'false' => { push_token(parser,lemon,CLOG_TOKEN_FALSE); };
 		
 		'enum';
 		'class';
@@ -133,11 +134,11 @@
 		'private';
 		'static';
 		
-		'this' => { push_token_text(parser,CLOG_TOKEN_THIS,ts,te-ts); };
-		'base' => { push_token_text(parser,CLOG_TOKEN_BASE,ts,te-ts); };
+		'this' => { push_token_text(parser,lemon,CLOG_TOKEN_THIS,ts,te-ts); };
+		'base' => { push_token_text(parser,lemon,CLOG_TOKEN_BASE,ts,te-ts); };
 				
 		# This is last, so everything above matches first
-		[A-Za-z_] [A-Za-z0-9_]* => { push_token_text(parser,CLOG_TOKEN_ID,ts,te-ts); };
+		[A-Za-z_] [A-Za-z0-9_]* => { push_token_text(parser,lemon,CLOG_TOKEN_ID,ts,te-ts); };
 	*|;
 	    
 	dump := string_char;
@@ -146,9 +147,9 @@
 
 %% write data;
 
-static void push_token(struct clog_parser* parser, unsigned int type)
+static void push_token(struct clog_parser* parser, void* lemon, unsigned int type)
 {
-	clog_parser(parser->lemon_parser,type,NULL,parser);
+	clog_parser(lemon,type,NULL,parser);
 }
 
 static size_t utf8_encode( unsigned char bytes[4], unsigned int unicode_char )
@@ -210,7 +211,7 @@ static size_t append_unicode(unsigned char* dest, const unsigned char* src)
     return len;
 }
 
-static void push_string(struct clog_parser* parser, const unsigned char* sz, size_t len)
+static void push_string(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len)
 {
 	size_t i,j;
 	struct clog_token* tok = NULL;
@@ -262,7 +263,7 @@ static void push_string(struct clog_parser* parser, const unsigned char* sz, siz
 									
 				default:
 					clog_free(str);
-					return clog_syntax_error(parser,"Invalid character escape");
+					return clog_syntax_error(parser,"Invalid escape character");
 				}
 			}
 		}
@@ -282,34 +283,20 @@ static void push_string(struct clog_parser* parser, const unsigned char* sz, siz
 	tok->value.string.len = len;
 	tok->value.string.str = str;
 	
-	clog_parser(parser->lemon_parser,CLOG_TOKEN_STRING,tok,parser);
+	clog_parser(lemon,CLOG_TOKEN_STRING,tok,parser);
 }
 
-static void push_token_text(struct clog_parser* parser, unsigned int type, const unsigned char* sz, size_t len)
+static void push_token_text(struct clog_parser* parser, void* lemon, unsigned int type, const unsigned char* sz, size_t len)
 {
 	struct clog_token* tok = NULL;
-	unsigned char* str = clog_malloc(len+1);
-	if (!str)
-		return clog_out_of_memory(parser);
-		
-	memcpy(str,sz,len);
-	str[len] = 0;
-	
-	tok = clog_malloc(sizeof(*tok));
+	clog_token_alloc(parser,&tok,sz,len);
 	if (!tok)
-	{
-		clog_free(str);
-		return clog_out_of_memory(parser);
-	}
+		return;
 	
-	tok->type = clog_token_string;
-	tok->value.string.len = len;
-	tok->value.string.str = str;
-	
-	clog_parser(parser->lemon_parser,type,tok,parser);
+	clog_parser(lemon,type,tok,parser);
 }
 
-static void push_int(struct clog_parser* parser, long v)
+static void push_int(struct clog_parser* parser, void* lemon, long v)
 {
 	struct clog_token* tok = clog_malloc(sizeof(*tok));
 	if (!tok)
@@ -318,10 +305,10 @@ static void push_int(struct clog_parser* parser, long v)
 	tok->type = clog_token_integer;
 	tok->value.integer = v;
 	
-	clog_parser(parser->lemon_parser,CLOG_TOKEN_INTEGER,tok,parser);
+	clog_parser(lemon,CLOG_TOKEN_INTEGER,tok,parser);
 }
 
-static void push_integer(struct clog_parser* parser, const unsigned char* sz, size_t len, unsigned int base)
+static void push_integer(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len, unsigned int base)
 {
 	long value = 0;
 	size_t i;
@@ -348,7 +335,7 @@ static void push_integer(struct clog_parser* parser, const unsigned char* sz, si
 			return clog_syntax_error(parser,"Value out of range");
 	}
 	
-	push_int(parser,value);
+	push_int(parser,lemon,value);
 }
 
 static double fast_pow10(int exp)
@@ -385,7 +372,7 @@ static double fast_pow10(int exp)
 	return fast_pow10(m) * fast_pow10(exp-m);
 }
 
-static void push_float(struct clog_parser* parser, const unsigned char* sz, size_t len)
+static void push_float(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len)
 {
 	struct clog_token* tok;
 	double d = 0.0;
@@ -443,10 +430,10 @@ static void push_float(struct clog_parser* parser, const unsigned char* sz, size
 	tok->type = clog_token_real;
 	tok->value.real = d;
 	
-	clog_parser(parser->lemon_parser,CLOG_TOKEN_FLOAT,tok,parser);
+	clog_parser(lemon,CLOG_TOKEN_FLOAT,tok,parser);
 }
 
-int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser* parser)
+int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser* parser, void* lemon)
 {
 	unsigned int cs;
 	unsigned int act;
@@ -490,10 +477,12 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 		
 		if (cs >= %%{ write first_final; }%%)
 			break;
-					
-		if (cs == %%{ write error; }%% || p == eof)
+			
+		if (p == eof)
 			clog_syntax_error(parser,"Unexpected end of file");
-				
+		else if (cs == %%{ write error; }%%)
+			clog_syntax_error(parser,"Unrecognized character");
+							
 		if (parser->failed)
 			break;
 				

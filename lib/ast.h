@@ -16,6 +16,7 @@ void* clog_realloc(void* p, size_t s);
 void clog_free(void* p);
 
 struct clog_parser;
+struct clog_ast_statement_list;
 
 void clog_out_of_memory(struct clog_parser* parser);
 void clog_syntax_error(struct clog_parser* parser, const char* msg);
@@ -46,6 +47,7 @@ struct clog_token
 };
 
 void clog_token_free(struct clog_parser* parser, struct clog_token* token);
+void clog_token_alloc(struct clog_parser* parser, struct clog_token** token, const unsigned char* sz, size_t len);
 
 /* Literal handling */
 struct clog_ast_literal
@@ -58,6 +60,8 @@ struct clog_ast_literal
 		clog_ast_literal_bool,
 		clog_ast_literal_null
 	} type;
+
+	unsigned long line;
 
 	union clog_ast_literal_u
 	{
@@ -90,9 +94,11 @@ struct clog_ast_expression
 	union clog_ast_expression_u
 	{
 		struct clog_ast_literal* literal;
+		struct clog_ast_literal* identifier;
 
 		struct clog_ast_expression_builtin
 		{
+			unsigned long line;
 			unsigned int type;
 			struct clog_ast_expression* args[3];
 		}* builtin;
@@ -112,6 +118,7 @@ void clog_ast_expression_alloc_id(struct clog_parser* parser, struct clog_ast_ex
 void clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1);
 void clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2);
 void clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2, struct clog_ast_expression* p3);
+void clog_ast_expression_alloc_assign(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2);
 void clog_ast_expression_alloc_builtin_lvalue(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2);
 void clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_expression** expr, struct clog_ast_expression* p1, struct clog_token* token);
 void clog_ast_expression_alloc_call(struct clog_parser* parser, struct clog_ast_expression** expr, struct clog_ast_expression* call, struct clog_ast_expression_list* list);
@@ -124,15 +131,47 @@ struct clog_ast_expression_list
 
 void clog_ast_expression_list_free(struct clog_parser* parser, struct clog_ast_expression_list* list);
 void clog_ast_expression_list_alloc(struct clog_parser* parser, struct clog_ast_expression_list** list, struct clog_ast_expression* expr);
-void clog_ast_expression_list_append(struct clog_parser* parser, struct clog_ast_expression_list* list, struct clog_ast_expression* expr);
+struct clog_ast_expression_list* clog_ast_expression_list_append(struct clog_parser* parser, struct clog_ast_expression_list* list, struct clog_ast_expression* expr);
+
+struct clog_ast_statement
+{
+	enum
+	{
+		clog_ast_statement_expression,
+		clog_ast_statement_block,
+		clog_ast_statement_declaration,
+
+	} type;
+
+	union clog_ast_statement_u
+	{
+		struct clog_ast_expression* expression;
+		struct clog_ast_statement_list* block;
+		struct clog_ast_literal* declaration;
+	} stmt;
+};
+
+void clog_ast_statement_free(struct clog_parser* parser, struct clog_ast_statement* stmt);
+void clog_ast_statement_alloc_expression(struct clog_parser* parser, struct clog_ast_statement** stmt, struct clog_ast_expression* expr);
+void clog_ast_statement_alloc_block(struct clog_parser* parser, struct clog_ast_statement** stmt, struct clog_ast_statement_list* list);
+
+struct clog_ast_statement_list
+{
+	struct clog_ast_statement* stmt;
+	struct clog_ast_statement_list* next;
+};
+
+void clog_ast_statement_list_free(struct clog_parser* parser, struct clog_ast_statement_list* list);
+void clog_ast_statement_list_alloc(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement* stmt);
+void clog_ast_statement_list_alloc_expression(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_expression* expr);
+struct clog_ast_statement_list* clog_ast_statement_list_append(struct clog_parser* parser, struct clog_ast_statement_list* list, struct clog_ast_statement_list* next);
+
+void clog_ast_statement_alloc_declaration(struct clog_parser* parser, struct clog_ast_statement_list** stmt, struct clog_token* id, struct clog_ast_expression* init);
 
 struct clog_parser
 {
 	int           failed;
 	unsigned long line;
-	void*         lemon_parser;
 };
-
-void clog_parser(void* lemon_parser, int type, struct clog_token* tok, struct clog_parser* parser);
 
 #endif /* AST_H_ */
