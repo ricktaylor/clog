@@ -38,12 +38,12 @@ void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_pars
 	backslash  = 0x5C;
 	            
 	comment       = '//' (char | tab)* LF;
-	multi_comment = '/*' ((char | tab | LF)* -- '*/') '*/' @err{ clog_syntax_error(parser,"Unclosed comment"); };
+	multi_comment = '/*' ((char | tab | LF)* -- '*/') '*/' @err{ clog_syntax_error(parser,"Unclosed comment",parser->line); };
 	
 	escape      = '"' | backslash | 't' | 'r' | 'n' | ('u' xdigit{4});
 	unescaped   = char - ('"' | backslash);
 	string_char = unescaped | (backslash escape);
-	string      = '"' string_char* '"' @err{ clog_syntax_error(parser,"Missing \""); };
+	string      = '"' string_char* '"' @err{ clog_syntax_error(parser,"Missing \"",parser->line); };
 	
 	exponent = ('e' | 'E') ('+' | '-')? digit+;
 	    
@@ -255,7 +255,7 @@ static void push_string(struct clog_parser* parser, void* lemon, const unsigned 
 					if (!len)
 					{
 						clog_free(str);
-						return clog_syntax_error(parser,"Invalid unicode value");
+						return clog_syntax_error(parser,"Invalid unicode value",parser->line);
 					}
 					j += len;
 					i += 4;
@@ -263,7 +263,7 @@ static void push_string(struct clog_parser* parser, void* lemon, const unsigned 
 									
 				default:
 					clog_free(str);
-					return clog_syntax_error(parser,"Invalid escape character");
+					return clog_syntax_error(parser,"Invalid escape character",parser->line);
 				}
 			}
 		}
@@ -329,10 +329,10 @@ static void push_integer(struct clog_parser* parser, void* lemon, const unsigned
 		{
 			value = value * base;
 			if (value > LONG_MAX - c)
-				return clog_syntax_error(parser,"Value out of range");
+				return clog_syntax_error(parser,"Value out of range",parser->line);
 		}
 		else
-			return clog_syntax_error(parser,"Value out of range");
+			return clog_syntax_error(parser,"Value out of range",parser->line);
 	}
 	
 	push_int(parser,lemon,value);
@@ -415,13 +415,13 @@ static void push_float(struct clog_parser* parser, void* lemon, const unsigned c
 	}
 	
 	if (exp < DBL_MIN_10_EXP || exp > DBL_MAX_10_EXP)
-		return clog_syntax_error(parser,"Exponent value out of range");
+		return clog_syntax_error(parser,"Exponent value out of range",parser->line);
 		
 	if (exp)
 		d *= fast_pow10(exp);
 	
 	if (d == HUGE_VAL)
-		return clog_syntax_error(parser,"Value out of range");
+		return clog_syntax_error(parser,"Value out of range",parser->line);
 	
 	tok = clog_malloc(sizeof(*tok));
 	if (!tok)
@@ -449,72 +449,67 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 		
 	buffer = clog_malloc(buffer_size);
 	if (!buffer)
-	{
 		clog_out_of_memory(parser);
-		return -1;
-	}
-		
-	for (p = buffer;!err && !eof && !parser->failed;)
+	else
 	{
-		const unsigned char* pe;
-		ptrdiff_t space = buffer_size - (p - buffer);
-		size_t read = space;
-				
-		if ((err = (*rd_fn)(rd_param,p,&read)) != 0)
-			break;
-		
-		pe = p + read;
-		if (read < space)
-			eof = pe;
-		
-		while (p != pe && !err && !parser->failed)
+		for (p = buffer;!err && !eof && !parser->failed;)
 		{
-			%% write exec;
-			
-			if (cs >= %%{ write first_final; }%% || cs == %%{ write error; }%%)
-				break;
-		}
-		
-		if (cs >= %%{ write first_final; }%%)
-			break;
-			
-		if (p == eof)
-			clog_syntax_error(parser,"Unexpected end of file");
-		else if (cs == %%{ write error; }%%)
-			clog_syntax_error(parser,"Unrecognized character");
-							
-		if (parser->failed)
-			break;
-				
-		p = buffer;
-		if (ts)
-		{
-			space = pe - ts;
-			if (space == buffer_size)
-			{
-				unsigned char* new_buffer = clog_realloc(buffer,buffer_size * 2);
-				if (!new_buffer)
-				{
-					clog_out_of_memory(parser);
-					break;
-				}
+			const unsigned char* pe;
+			ptrdiff_t space = buffer_size - (p - buffer);
+			size_t read = space;
 					
-				buffer_size *= 2;
-				ts = new_buffer + (ts - buffer);
-				p = new_buffer;				
-				buffer = new_buffer;
+			if ((err = (*rd_fn)(rd_param,p,&read)) != 0)
+				break;
+			
+			pe = p + read;
+			if (read < space)
+				eof = pe;
+			
+			while (p != pe && !err && !parser->failed)
+			{
+				%% write exec;
+				
+				if (cs >= %%{ write first_final; }%% || cs == %%{ write error; }%%)
+					break;
 			}
 			
-			memmove(p,ts,space);
-			ts = p;
-			p += space;
+			if (cs >= %%{ write first_final; }%%)
+				break;
+				
+			if (p == eof)
+				clog_syntax_error(parser,"Unexpected end of file",parser->line);
+			else if (cs == %%{ write error; }%%)
+				clog_syntax_error(parser,"Unrecognized character",parser->line);
+								
+			if (parser->failed)
+				break;
+					
+			p = buffer;
+			if (ts)
+			{
+				space = pe - ts;
+				if (space == buffer_size)
+				{
+					unsigned char* new_buffer = clog_realloc(buffer,buffer_size * 2);
+					if (!new_buffer)
+					{
+						clog_out_of_memory(parser);
+						break;
+					}
+						
+					buffer_size *= 2;
+					ts = new_buffer + (ts - buffer);
+					p = new_buffer;				
+					buffer = new_buffer;
+				}
+				
+				memmove(p,ts,space);
+				ts = p;
+				p += space;
+			}
 		}
+		clog_free(buffer);
 	}
-	
-	clog_free(buffer);
-	
-	if (!err && parser->failed)
-		err = -1;
 	
 	return err;
 }

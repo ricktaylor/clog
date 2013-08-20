@@ -19,7 +19,7 @@ struct clog_parser;
 struct clog_ast_statement_list;
 
 void clog_out_of_memory(struct clog_parser* parser);
-void clog_syntax_error(struct clog_parser* parser, const char* msg);
+void clog_syntax_error(struct clog_parser* parser, const char* msg, unsigned long line);
 
 /* Simple string */
 struct clog_string
@@ -148,6 +148,13 @@ struct clog_ast_statement
 		struct clog_ast_expression* expression;
 		struct clog_ast_statement_list* block;
 		struct clog_ast_literal* declaration;
+
+		struct clog_ast_if
+		{
+			struct clog_ast_statement_list* condition;
+			struct clog_ast_statement_list* true_stmt;
+			struct clog_ast_statement_list* false_stmt;
+		}* if_stmt;
 	} stmt;
 };
 
@@ -167,11 +174,14 @@ void clog_ast_statement_list_alloc_expression(struct clog_parser* parser, struct
 struct clog_ast_statement_list* clog_ast_statement_list_append(struct clog_parser* parser, struct clog_ast_statement_list* list, struct clog_ast_statement_list* next);
 
 void clog_ast_statement_alloc_declaration(struct clog_parser* parser, struct clog_ast_statement_list** stmt, struct clog_token* id, struct clog_ast_expression* init);
+void clog_ast_statement_alloc_if(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* cond, struct clog_ast_statement_list* true_expr, struct clog_ast_statement_list* false_expr);
 
 struct clog_parser
 {
 	int           failed;
 	unsigned long line;
+
+	struct clog_ast_statement_list* pgm;
 };
 
 #endif /* AST_H_ */
