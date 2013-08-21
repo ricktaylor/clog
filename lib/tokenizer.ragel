@@ -211,7 +211,7 @@ static size_t append_unicode(unsigned char* dest, const unsigned char* src)
     return len;
 }
 
-static void push_string(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len)
+static int push_string(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len)
 {
 	size_t i,j;
 	struct clog_token* tok = NULL;
@@ -284,19 +284,22 @@ static void push_string(struct clog_parser* parser, void* lemon, const unsigned 
 	tok->value.string.str = str;
 	
 	clog_parser(lemon,CLOG_TOKEN_STRING,tok,parser);
+	
+	return !parser->failed;
 }
 
-static void push_token_text(struct clog_parser* parser, void* lemon, unsigned int type, const unsigned char* sz, size_t len)
+static int push_token_text(struct clog_parser* parser, void* lemon, unsigned int type, const unsigned char* sz, size_t len)
 {
 	struct clog_token* tok = NULL;
-	clog_token_alloc(parser,&tok,sz,len);
-	if (!tok)
-		return;
+	if (!clog_token_alloc(parser,&tok,sz,len))
+		return 0;
 	
 	clog_parser(lemon,type,tok,parser);
+	
+	return !parser->failed;
 }
 
-static void push_int(struct clog_parser* parser, void* lemon, long v)
+static int push_int(struct clog_parser* parser, void* lemon, long v)
 {
 	struct clog_token* tok = clog_malloc(sizeof(*tok));
 	if (!tok)
@@ -306,9 +309,11 @@ static void push_int(struct clog_parser* parser, void* lemon, long v)
 	tok->value.integer = v;
 	
 	clog_parser(lemon,CLOG_TOKEN_INTEGER,tok,parser);
+	
+	return !parser->failed;
 }
 
-static void push_integer(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len, unsigned int base)
+static int push_integer(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len, unsigned int base)
 {
 	long value = 0;
 	size_t i;
@@ -335,7 +340,7 @@ static void push_integer(struct clog_parser* parser, void* lemon, const unsigned
 			return clog_syntax_error(parser,"Value out of range",parser->line);
 	}
 	
-	push_int(parser,lemon,value);
+	return push_int(parser,lemon,value);
 }
 
 static double fast_pow10(int exp)
@@ -372,7 +377,7 @@ static double fast_pow10(int exp)
 	return fast_pow10(m) * fast_pow10(exp-m);
 }
 
-static void push_float(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len)
+static int push_float(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len)
 {
 	struct clog_token* tok;
 	double d = 0.0;
@@ -431,6 +436,8 @@ static void push_float(struct clog_parser* parser, void* lemon, const unsigned c
 	tok->value.real = d;
 	
 	clog_parser(lemon,CLOG_TOKEN_FLOAT,tok,parser);
+	
+	return !parser->failed;
 }
 
 int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser* parser, void* lemon)
