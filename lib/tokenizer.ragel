@@ -390,7 +390,7 @@ static int push_float(struct clog_parser* parser, void* lemon, const unsigned ch
 	if (i<len && sz[i] == '.')
 	{
 		++i;
-		for (i=0;i<len && sz[i] >= '0' && sz[i] <= '9';++i)
+		for (;i<len && sz[i] >= '0' && sz[i] <= '9';++i)
 		{
 			d = d * 10.0 + (sz[i] - '0');
 			--exp;
