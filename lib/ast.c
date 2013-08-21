@@ -1471,6 +1471,33 @@ static int clog_ast_statement_list_if_alloc(struct clog_parser* parser, struct c
 	cond->stmt->stmt.expression = NULL;
 	clog_ast_statement_list_free(parser,cond);
 
+	/* If there are no declarations in the statements, decapsulate */
+	if (true_stmt && true_stmt->stmt->type == clog_ast_statement_block)
+	{
+		struct clog_ast_statement_list* l = true_stmt->stmt->stmt.block;
+		for (;l;l = l->next)
+		{
+			if (l->stmt->type == clog_ast_statement_declaration || l->stmt->type == clog_ast_statement_block)
+				break;
+		}
+
+		if (!l)
+			clog_ast_statement_list_decapsulate(parser,&true_stmt);
+	}
+
+	if (false_stmt && false_stmt->stmt->type == clog_ast_statement_block)
+	{
+		struct clog_ast_statement_list* l = false_stmt->stmt->stmt.block;
+		for (;l;l = l->next)
+		{
+			if (l->stmt->type == clog_ast_statement_declaration || l->stmt->type == clog_ast_statement_block)
+				break;
+		}
+
+		if (!l)
+			clog_ast_statement_list_decapsulate(parser,&false_stmt);
+	}
+
 	(*list)->stmt->stmt.if_stmt->true_stmt = true_stmt;
 	(*list)->stmt->stmt.if_stmt->false_stmt = false_stmt;
 
