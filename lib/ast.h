@@ -160,8 +160,6 @@ struct clog_ast_statement
 	} stmt;
 };
 
-void clog_ast_statement_free(struct clog_parser* parser, struct clog_ast_statement* stmt);
-
 struct clog_ast_statement_list
 {
 	struct clog_ast_statement* stmt;
@@ -169,6 +167,7 @@ struct clog_ast_statement_list
 };
 
 void clog_ast_statement_list_free(struct clog_parser* parser, struct clog_ast_statement_list* list);
+int clog_ast_statement_list_alloc(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement* stmt);
 int clog_ast_statement_list_alloc_expression(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_expression* expr);
 int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* block);
 struct clog_ast_statement_list* clog_ast_statement_list_append(struct clog_parser* parser, struct clog_ast_statement_list* list, struct clog_ast_statement_list* next);
