@@ -13,14 +13,18 @@
 
 int clog_out_of_memory(struct clog_parser* parser)
 {
-	printf("Out of memory building AST\n");
+	if (!parser->failed)
+		printf("Out of memory building AST\n");
+
 	parser->failed = 1;
 	return 0;
 }
 
 int clog_syntax_error(struct clog_parser* parser, const char* msg, unsigned long line)
 {
-	printf("Syntax error at line %lu: %s\n",line,msg);
+	if (!parser->failed)
+		printf("Syntax error at line %lu: %s\n",line,msg);
+
 	parser->failed = 1;
 	return 0;
 }
@@ -1729,12 +1733,12 @@ static void clog_ast_dump_expr(const struct clog_ast_expression* expr)
 		break;
 	}
 
-	printf("[");
+	/*printf("[");
 	if (expr->constant)
 		printf("C");
 	if (expr->lvalue)
 		printf("L");
-	printf("]");
+	printf("]");*/
 }
 
 static void clog_ast_dump(size_t indent, const struct clog_ast_statement_list* list)

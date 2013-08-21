@@ -17,7 +17,7 @@
 %token_destructor { clog_token_free(parser,$$); }
 
 %extra_argument { struct clog_parser* parser }
-%parse_failure { clog_syntax_error(parser,"Unexpected token",parser->line); }
+%syntax_error { clog_syntax_error(parser,"Unexpected token",parser->line); }
 
 %start_symbol program
 
