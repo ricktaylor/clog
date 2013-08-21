@@ -69,12 +69,12 @@ for_init_statement(A) ::= variable_declaration(B). { A = B; }
 
 %type condition                       { struct clog_ast_statement_list* }
 %destructor condition                 { clog_ast_statement_list_free(parser,$$); }
-condition(A) ::= expression(B).       { clog_ast_statement_list_alloc_expression(parser,&A,B); }
+condition(A) ::= expression(B).       { clog_ast_statement_list_alloc_expression(parser,&A,B,0); }
 condition(A) ::= VAR ID(B) ASSIGN initializer(C). { clog_ast_statement_list_alloc_declaration(parser,&A,B,C); }
 
 %type expression_statement              { struct clog_ast_statement_list* }
 %destructor expression_statement        { clog_ast_statement_list_free(parser,$$); }
-expression_statement(A) ::= expression(B) SEMI_COLON. { clog_ast_statement_list_alloc_expression(parser,&A,B); }
+expression_statement(A) ::= expression(B) SEMI_COLON. { clog_ast_statement_list_alloc_expression(parser,&A,B,1); }
 expression_statement(A) ::= SEMI_COLON.               { A = NULL; }
 
 %type compound_statement              { struct clog_ast_statement_list* }
