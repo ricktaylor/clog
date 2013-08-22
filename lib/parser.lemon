@@ -43,10 +43,10 @@ simple_statement(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_C
 simple_statement(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_COLON CLOSE_PAREN simple_statement(E).               { clog_ast_statement_list_alloc_for(parser,&A,B,C,NULL,E); }
 simple_statement(A) ::= FOR OPEN_PAREN for_init_statement(B) SEMI_COLON expression(D) CLOSE_PAREN simple_statement(E).              { clog_ast_statement_list_alloc_for(parser,&A,B,NULL,D,E); }
 simple_statement(A) ::= DO statement(B) WHILE OPEN_PAREN expression(C) CLOSE_PAREN. { clog_ast_statement_list_alloc_do(parser,&A,C,B); }
-simple_statement(A) ::= expression_statement(B). { A = B; }
-simple_statement(A) ::= compound_statement(B).   { A = B; }
+simple_statement(A) ::= expression_statement(B).  { A = B; }
+simple_statement(A) ::= compound_statement(B).    { A = B; }
 simple_statement(A) ::= declaration_statement(B). { A = B; }
-simple_statement ::= jump_statement.
+simple_statement(A) ::= jump_statement(B).        { A = B; }
 simple_statement ::= try_block.
 
 dangling_if(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN statement(C).                            { clog_ast_statement_list_alloc_if(parser,&A,B,C,NULL); }
@@ -77,10 +77,10 @@ handler ::= CATCH OPEN_PAREN exception_declaration CLOSE_PAREN compound_statemen
 
 exception_declaration ::= ELIPSIS.
 
-jump_statement ::= BREAK SEMI_COLON.
-jump_statement ::= CONTINUE SEMI_COLON.
-jump_statement ::= RETURN SEMI_COLON.
-jump_statement ::= RETURN expression SEMI_COLON.
+jump_statement(A) ::= BREAK SEMI_COLON.                { clog_ast_statement_list_alloc(parser,&A,clog_ast_statement_break); }
+jump_statement(A) ::= CONTINUE SEMI_COLON.             { clog_ast_statement_list_alloc(parser,&A,clog_ast_statement_continue); }
+jump_statement(A) ::= RETURN SEMI_COLON.               { clog_ast_statement_list_alloc_return(parser,&A,NULL); }
+jump_statement(A) ::= RETURN expression(B) SEMI_COLON. { clog_ast_statement_list_alloc_return(parser,&A,B); }
 
 declaration_statement(A) ::= variable_declaration(B). { A = B; }
 
