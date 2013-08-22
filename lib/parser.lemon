@@ -43,7 +43,7 @@ statement(A) ::= dangling_if(B).      { A = B; }
 %type simple_statement                       { struct clog_ast_statement_list* }
 %destructor simple_statement                 { clog_ast_statement_list_free(parser,$$); }
 simple_statement(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C) ELSE simple_statement(D). { clog_ast_statement_list_alloc_if(parser,&A,B,C,D); } 
-simple_statement ::= WHILE OPEN_PAREN condition CLOSE_PAREN simple_statement.
+simple_statement(A) ::= WHILE OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C).                       { clog_ast_statement_list_alloc_while(parser,&A,B,C); }
 simple_statement ::= for_statement simple_statement.
 simple_statement(A) ::= DO statement(B) WHILE OPEN_PAREN expression(C) CLOSE_PAREN. { clog_ast_statement_list_alloc_do(parser,&A,C,B); }
 simple_statement(A) ::= expression_statement(B). { A = B; }
@@ -56,7 +56,7 @@ simple_statement ::= jump_statement.
 %destructor dangling_if                 { clog_ast_statement_list_free(parser,$$); }
 dangling_if(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN statement(C).                            { clog_ast_statement_list_alloc_if(parser,&A,B,C,NULL); }
 dangling_if(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C) ELSE dangling_if(D). { clog_ast_statement_list_alloc_if(parser,&A,B,C,D); }
-dangling_if ::= WHILE OPEN_PAREN condition CLOSE_PAREN dangling_if.
+dangling_if(A) ::= WHILE OPEN_PAREN condition(B) CLOSE_PAREN dangling_if(C).                       { clog_ast_statement_list_alloc_while(parser,&A,B,C); }
 dangling_if ::= for_statement dangling_if.
 
 for_statement ::= FOR OPEN_PAREN for_init_statement condition SEMI_COLON expression CLOSE_PAREN.

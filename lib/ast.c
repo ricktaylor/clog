@@ -365,7 +365,7 @@ static int clog_ast_expression_list_clone(struct clog_parser* parser, struct clo
 
 static int clog_ast_expression_clone(struct clog_parser* parser, struct clog_ast_expression** new, const struct clog_ast_expression* expr)
 {
-	int err = 0;
+	int ok = 0;
 
 	*new = NULL;
 
@@ -383,31 +383,31 @@ static int clog_ast_expression_clone(struct clog_parser* parser, struct clog_ast
 	switch ((*new)->type)
 	{
 	case clog_ast_expression_literal:
-		err = clog_ast_literal_clone(parser,&(*new)->expr.literal,expr->expr.literal);
+		ok = clog_ast_literal_clone(parser,&(*new)->expr.literal,expr->expr.literal);
 		break;
 
 	case clog_ast_expression_identifier:
-		err = clog_ast_literal_clone(parser,&(*new)->expr.identifier,expr->expr.identifier);
+		ok = clog_ast_literal_clone(parser,&(*new)->expr.identifier,expr->expr.identifier);
 		break;
 
 	case clog_ast_expression_builtin:
 		(*new)->expr.builtin = clog_malloc(sizeof(struct clog_ast_expression_builtin));
 		if (!(*new)->expr.builtin)
 		{
-			err = clog_out_of_memory(parser);
+			ok = clog_out_of_memory(parser);
 			break;
 		}
 
 		(*new)->expr.builtin->type = expr->expr.builtin->type;
 		(*new)->expr.builtin->line = expr->expr.builtin->line;
 
-		err = clog_ast_expression_clone(parser,&(*new)->expr.builtin->args[0],expr->expr.builtin->args[0]);
-		if (!err)
-			err = clog_ast_expression_clone(parser,&(*new)->expr.builtin->args[1],expr->expr.builtin->args[1]);
-		if (!err)
-			err = clog_ast_expression_clone(parser,&(*new)->expr.builtin->args[2],expr->expr.builtin->args[2]);
+		ok = clog_ast_expression_clone(parser,&(*new)->expr.builtin->args[0],expr->expr.builtin->args[0]);
+		if (ok)
+			ok = clog_ast_expression_clone(parser,&(*new)->expr.builtin->args[1],expr->expr.builtin->args[1]);
+		if (ok)
+			ok = clog_ast_expression_clone(parser,&(*new)->expr.builtin->args[2],expr->expr.builtin->args[2]);
 
-		if (err)
+		if (!ok)
 			clog_free((*new)->expr.builtin);
 		break;
 
@@ -415,25 +415,25 @@ static int clog_ast_expression_clone(struct clog_parser* parser, struct clog_ast
 		(*new)->expr.call = clog_malloc(sizeof(struct clog_ast_expression_call));
 		if (!(*new)->expr.call)
 		{
-			err = clog_out_of_memory(parser);
+			ok = clog_out_of_memory(parser);
 			break;
 		}
 
-		err = clog_ast_expression_clone(parser,&(*new)->expr.call->expr,expr->expr.call->expr);
-		if (!err)
-			err = clog_ast_expression_list_clone(parser,&(*new)->expr.call->params,expr->expr.call->params);
+		ok = clog_ast_expression_clone(parser,&(*new)->expr.call->expr,expr->expr.call->expr);
+		if (ok)
+			ok = clog_ast_expression_list_clone(parser,&(*new)->expr.call->params,expr->expr.call->params);
 
-		if (err)
+		if (!ok)
 			clog_free((*new)->expr.call);
 		break;
 	}
 
-	if (err)
+	if (!ok)
 	{
 		clog_free(*new);
 		*new = NULL;
 	}
-	return err;
+	return ok;
 }
 
 unsigned long clog_ast_expression_line(const struct clog_ast_expression* expr)
@@ -1283,7 +1283,7 @@ static int clog_ast_expression_list_clone(struct clog_parser* parser, struct clo
 	*new = NULL;
 
 	if (!list)
-		return 0;
+		return 1;
 
 	*new = clog_malloc(sizeof(struct clog_ast_expression_list));
 	if (!*new)
@@ -1670,15 +1670,15 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 	}
 
 	/* Eliminate constant expressions in the clauses */
-	if (clog_ast_statement_list_is_const(true_stmt))
+	if (true_stmt && clog_ast_statement_list_is_const(true_stmt))
 	{
 		clog_ast_statement_list_free(parser,true_stmt);
 		true_stmt = NULL;
 	}
-	if (clog_ast_statement_list_is_const(false_stmt))
+	if (false_stmt && clog_ast_statement_list_is_const(false_stmt))
 	{
 		clog_ast_statement_list_free(parser,false_stmt);
-		true_stmt = NULL;
+		false_stmt = NULL;
 	}
 
 	/* If we have no result statements, see if the comparison is constant */
@@ -1771,10 +1771,8 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		}
 	}
 
-	/* Check for const x = const_expr */
-	if (cond->next->stmt->stmt.expression->type == clog_ast_expression_builtin &&
-			cond->next->stmt->stmt.expression->expr.builtin->type == CLOG_TOKEN_ASSIGN &&
-			clog_ast_statement_list_is_const(cond) &&
+	/* Check for var x = const_expr */
+	if (clog_ast_statement_list_is_const(cond) &&
 			cond->next->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_literal)
 	{
 		if (clog_ast_literal_bool_cast(cond->next->stmt->stmt.expression->expr.builtin->args[1]->expr.literal))
@@ -1829,7 +1827,7 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 	}
 
 	/* Eliminate constant expressions in the loop */
-	if (clog_ast_statement_list_is_const(loop_stmt))
+	if (loop_stmt && clog_ast_statement_list_is_const(loop_stmt))
 	{
 		clog_ast_statement_list_free(parser,loop_stmt);
 		loop_stmt = NULL;
@@ -1906,13 +1904,49 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 	return 1;
 }
 
+int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* cond_stmt, struct clog_ast_statement_list* loop_stmt)
+{
+	struct clog_ast_expression* cond_expr = NULL;
 
+	*list = NULL;
+	if (!cond_stmt)
+	{
+		clog_ast_statement_list_free(parser,loop_stmt);
+		return 0;
+	}
 
+	/* Translate while (E) {S} => if (E) do {S} while (E) */
 
+	/* Clone the condition expression */
+	if (cond_stmt->stmt->type == clog_ast_statement_declaration)
+	{
+		if (!clog_ast_expression_clone(parser,&cond_expr,cond_stmt->next->stmt->stmt.expression))
+		{
+			clog_ast_statement_list_free(parser,cond_stmt);
+			clog_ast_statement_list_free(parser,loop_stmt);
+			return 0;
+		}
+	}
+	else
+	{
+		if (!clog_ast_expression_clone(parser,&cond_expr,cond_stmt->stmt->stmt.expression))
+		{
+			clog_ast_statement_list_free(parser,cond_stmt);
+			clog_ast_statement_list_free(parser,loop_stmt);
+			return 0;
+		}
+	}
 
+	/* Create the do loop */
+	if (!clog_ast_statement_list_alloc_do(parser,list,cond_expr,loop_stmt))
+	{
+		clog_ast_statement_list_free(parser,cond_stmt);
+		return 0;
+	}
 
-
-
+	/* Create the if */
+	return clog_ast_statement_list_alloc_if(parser,list,cond_stmt,*list,NULL);
+}
 
 static void clog_ast_indent(size_t indent)
 {
