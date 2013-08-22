@@ -119,10 +119,15 @@ void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_pars
 		'throw' => { push_token(parser,lemon,CLOG_TOKEN_THROW); };
 		'try'   => { push_token(parser,lemon,CLOG_TOKEN_TRY); };
 		'catch' => { push_token(parser,lemon,CLOG_TOKEN_CATCH); };
-#		'function' => { push_token(parser,lemon,CLOG_TOKEN_FUNCTION); };
 		'null' => { push_token(parser,lemon,CLOG_TOKEN_NULL); };
 		'true' => { push_token(parser,lemon,CLOG_TOKEN_TRUE); };
 		'false' => { push_token(parser,lemon,CLOG_TOKEN_FALSE); };
+		'break' => { push_token(parser,lemon,CLOG_TOKEN_BREAK); };
+		'continue' => { push_token(parser,lemon,CLOG_TOKEN_CONTINUE); };
+		'return' => { push_token(parser,lemon,CLOG_TOKEN_RETURN); };
+			
+		
+#		'function' => { push_token(parser,lemon,CLOG_TOKEN_FUNCTION); };
 		
 		'enum';
 		'class';
@@ -133,6 +138,8 @@ void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_pars
 		'protected';
 		'private';
 		'static';
+		
+		
 		
 		'this' => { push_token_text(parser,lemon,CLOG_TOKEN_THIS,ts,te-ts); };
 		'base' => { push_token_text(parser,lemon,CLOG_TOKEN_BASE,ts,te-ts); };

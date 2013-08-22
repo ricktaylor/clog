@@ -45,11 +45,12 @@ statement(A) ::= dangling_if(B).      { A = B; }
 simple_statement(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C) ELSE simple_statement(D). { clog_ast_statement_list_alloc_if(parser,&A,B,C,D); } 
 simple_statement ::= WHILE OPEN_PAREN condition CLOSE_PAREN simple_statement.
 simple_statement ::= for_statement simple_statement.
-simple_statement ::= DO statement WHILE OPEN_PAREN expression CLOSE_PAREN.
+simple_statement(A) ::= DO statement(B) WHILE OPEN_PAREN expression(C) CLOSE_PAREN. { clog_ast_statement_list_alloc_do(parser,&A,C,B); }
 simple_statement(A) ::= expression_statement(B). { A = B; }
 simple_statement(A) ::= compound_statement(B).   { A = B; }
 simple_statement ::= try_block.
 simple_statement(A) ::= declaration_statement(B). { A = B; }
+simple_statement ::= jump_statement.
 
 %type dangling_if                       { struct clog_ast_statement_list* }
 %destructor dangling_if                 { clog_ast_statement_list_free(parser,$$); }
@@ -90,6 +91,11 @@ handler_list ::= handler.
 handler ::= CATCH OPEN_PAREN exception_declaration CLOSE_PAREN compound_statement.
 
 exception_declaration ::= ELIPSIS.
+
+jump_statement ::= BREAK SEMI_COLON.
+jump_statement ::= CONTINUE SEMI_COLON.
+jump_statement ::= RETURN SEMI_COLON.
+jump_statement ::= RETURN expression SEMI_COLON.
 
 %type declaration_statement                       { struct clog_ast_statement_list* }
 %destructor declaration_statement                 { clog_ast_statement_list_free(parser,$$); }
