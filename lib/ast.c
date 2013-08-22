@@ -1274,15 +1274,32 @@ int clog_ast_statement_list_alloc_expression(struct clog_parser* parser, struct 
 	return 1;
 }
 
-static void clog_ast_statement_list_decapsulate(struct clog_parser* parser, struct clog_ast_statement_list** list)
+static void clog_ast_statement_list_flatten(struct clog_parser* parser, struct clog_ast_statement_list** list)
 {
+	if (!*list)
+		return;
+
 	if ((*list)->stmt->type == clog_ast_statement_block)
 	{
-		struct clog_ast_statement_list* l = (*list)->stmt->stmt.block;
-		(*list)->stmt->stmt.block = NULL;
-		clog_ast_statement_list_free(parser,*list);
-		*list = l;
+		struct clog_ast_statement_list* find = (*list)->stmt->stmt.block;
+		for (;find;find = find->next)
+		{
+			if (find->stmt->type == clog_ast_statement_declaration)
+				break;
+		}
+
+		if (!find)
+		{
+			struct clog_ast_statement_list* l = (*list)->stmt->stmt.block;
+			clog_ast_statement_list_append(parser,l,(*list)->next);
+			(*list)->stmt->stmt.block = NULL;
+			(*list)->next = NULL;
+			clog_ast_statement_list_free(parser,*list);
+			*list = l;
+		}
 	}
+
+	clog_ast_statement_list_flatten(parser,&(*list)->next);
 }
 
 int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* block)
@@ -1305,6 +1322,9 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 		clog_ast_statement_list_free(parser,block);
 		return 1;
 	}
+
+	/* Check for blocks in block */
+	clog_ast_statement_list_flatten(parser,&block);
 
 	*list = clog_malloc(sizeof(struct clog_ast_statement_list));
 	if (!*list)
@@ -1471,32 +1491,8 @@ static int clog_ast_statement_list_if_alloc(struct clog_parser* parser, struct c
 	cond->stmt->stmt.expression = NULL;
 	clog_ast_statement_list_free(parser,cond);
 
-	/* If there are no declarations in the statements, decapsulate */
-	if (true_stmt && true_stmt->stmt->type == clog_ast_statement_block)
-	{
-		struct clog_ast_statement_list* l = true_stmt->stmt->stmt.block;
-		for (;l;l = l->next)
-		{
-			if (l->stmt->type == clog_ast_statement_declaration || l->stmt->type == clog_ast_statement_block)
-				break;
-		}
-
-		if (!l)
-			clog_ast_statement_list_decapsulate(parser,&true_stmt);
-	}
-
-	if (false_stmt && false_stmt->stmt->type == clog_ast_statement_block)
-	{
-		struct clog_ast_statement_list* l = false_stmt->stmt->stmt.block;
-		for (;l;l = l->next)
-		{
-			if (l->stmt->type == clog_ast_statement_declaration || l->stmt->type == clog_ast_statement_block)
-				break;
-		}
-
-		if (!l)
-			clog_ast_statement_list_decapsulate(parser,&false_stmt);
-	}
+	clog_ast_statement_list_flatten(parser,&true_stmt);
+	clog_ast_statement_list_flatten(parser,&false_stmt);
 
 	(*list)->stmt->stmt.if_stmt->true_stmt = true_stmt;
 	(*list)->stmt->stmt.if_stmt->false_stmt = false_stmt;
@@ -1616,13 +1612,29 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		if (clog_ast_literal_bool_cast(cond->next->stmt->stmt.expression->expr.builtin->args[1]->expr.literal))
 		{
 			clog_ast_statement_list_free(parser,false_stmt);
-			clog_ast_statement_list_decapsulate(parser,&true_stmt);
+
+			if (true_stmt->stmt->type == clog_ast_statement_block)
+			{
+				struct clog_ast_statement_list* l = true_stmt->stmt->stmt.block;
+				true_stmt->stmt->stmt.block = NULL;
+				clog_ast_statement_list_free(parser,true_stmt);
+				true_stmt = l;
+			}
+
 			clog_ast_statement_list_append(parser,cond,true_stmt);
 		}
 		else
 		{
 			clog_ast_statement_list_free(parser,true_stmt);
-			clog_ast_statement_list_decapsulate(parser,&false_stmt);
+
+			if (false_stmt->stmt->type == clog_ast_statement_block)
+			{
+				struct clog_ast_statement_list* l = false_stmt->stmt->stmt.block;
+				false_stmt->stmt->stmt.block = NULL;
+				clog_ast_statement_list_free(parser,false_stmt);
+				false_stmt = l;
+			}
+
 			clog_ast_statement_list_append(parser,cond,false_stmt);
 		}
 	}
