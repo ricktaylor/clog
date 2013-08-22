@@ -547,8 +547,19 @@ int clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_ex
 
 int clog_ast_expression_alloc_builtin_lvalue(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
 {
-	if (!clog_ast_expression_alloc_builtin2(parser,expr,type,p1,p2))
-		return 0;
+	switch (type)
+	{
+	case CLOG_TOKEN_DOUBLE_PLUS:
+	case CLOG_TOKEN_DOUBLE_MINUS:
+		if (!clog_ast_expression_alloc_builtin1(parser,expr,type,p1))
+			return 0;
+		break;
+
+	default:
+		if (!clog_ast_expression_alloc_builtin2(parser,expr,type,p1,p2))
+			return 0;
+		break;
+	}
 
 	(*expr)->lvalue = 1;
 
@@ -1779,7 +1790,7 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		{
 			clog_ast_statement_list_free(parser,false_stmt);
 
-			if (true_stmt->stmt->type == clog_ast_statement_block)
+			if (true_stmt && true_stmt->stmt->type == clog_ast_statement_block)
 			{
 				struct clog_ast_statement_list* l = true_stmt->stmt->stmt.block;
 				true_stmt->stmt->stmt.block = NULL;
@@ -1793,7 +1804,7 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		{
 			clog_ast_statement_list_free(parser,true_stmt);
 
-			if (false_stmt->stmt->type == clog_ast_statement_block)
+			if (false_stmt && false_stmt->stmt->type == clog_ast_statement_block)
 			{
 				struct clog_ast_statement_list* l = false_stmt->stmt->stmt.block;
 				false_stmt->stmt->stmt.block = NULL;
