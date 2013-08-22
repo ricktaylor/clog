@@ -23,25 +23,20 @@
 
 %stack_size 0
 
-%type program              { struct clog_ast_statement_list* }
-%destructor program        { clog_ast_statement_list_free(parser,$$); }
+%default_type       { struct clog_ast_statement_list* }
+%default_destructor { clog_ast_statement_list_free(parser,$$); }
+
 program ::= statement_list(A). { parser->pgm = A; }
 
-%type statement_list              { struct clog_ast_statement_list* }
-%destructor statement_list        { clog_ast_statement_list_free(parser,$$); }
 statement_list(A) ::= statement(B).                   { A = B; }
 statement_list(A) ::= statement_list(B) statement(C). { A = clog_ast_statement_list_append(parser,B,C); }
 
-%type statement                       { struct clog_ast_statement_list* }
-%destructor statement                 { clog_ast_statement_list_free(parser,$$); }
 statement(A) ::= simple_statement(B). { A = B; }
 statement(A) ::= dangling_if(B).      { A = B; }
 
 /* If's just make the grammar horrible
  * http://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else
  */
-%type simple_statement                       { struct clog_ast_statement_list* }
-%destructor simple_statement                 { clog_ast_statement_list_free(parser,$$); }
 simple_statement(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C) ELSE simple_statement(D). { clog_ast_statement_list_alloc_if(parser,&A,B,C,D); } 
 simple_statement(A) ::= WHILE OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C).                       { clog_ast_statement_list_alloc_while(parser,&A,B,C); }
 simple_statement(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_COLON expression(D) CLOSE_PAREN simple_statement(E). { clog_ast_statement_list_alloc_for(parser,&A,B,C,D,E); }
@@ -50,12 +45,10 @@ simple_statement(A) ::= FOR OPEN_PAREN for_init_statement(B) SEMI_COLON expressi
 simple_statement(A) ::= DO statement(B) WHILE OPEN_PAREN expression(C) CLOSE_PAREN. { clog_ast_statement_list_alloc_do(parser,&A,C,B); }
 simple_statement(A) ::= expression_statement(B). { A = B; }
 simple_statement(A) ::= compound_statement(B).   { A = B; }
-simple_statement ::= try_block.
 simple_statement(A) ::= declaration_statement(B). { A = B; }
 simple_statement ::= jump_statement.
+simple_statement ::= try_block.
 
-%type dangling_if                       { struct clog_ast_statement_list* }
-%destructor dangling_if                 { clog_ast_statement_list_free(parser,$$); }
 dangling_if(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN statement(C).                            { clog_ast_statement_list_alloc_if(parser,&A,B,C,NULL); }
 dangling_if(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C) ELSE dangling_if(D). { clog_ast_statement_list_alloc_if(parser,&A,B,C,D); }
 dangling_if(A) ::= WHILE OPEN_PAREN condition(B) CLOSE_PAREN dangling_if(C).                       { clog_ast_statement_list_alloc_while(parser,&A,B,C); }
@@ -63,23 +56,15 @@ dangling_if(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_COLON 
 dangling_if(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_COLON CLOSE_PAREN dangling_if(E).               { clog_ast_statement_list_alloc_for(parser,&A,B,C,NULL,E); }
 dangling_if(A) ::= FOR OPEN_PAREN for_init_statement(B) SEMI_COLON expression(D) CLOSE_PAREN dangling_if(E).              { clog_ast_statement_list_alloc_for(parser,&A,B,NULL,D,E); }
 
-%type for_init_statement                       { struct clog_ast_statement_list* }
-%destructor for_init_statement                 { clog_ast_statement_list_free(parser,$$); }
 for_init_statement(A) ::= expression_statement(B). { A = B; }
 for_init_statement(A) ::= variable_declaration(B). { A = B; }
 
-%type condition                       { struct clog_ast_statement_list* }
-%destructor condition                 { clog_ast_statement_list_free(parser,$$); }
 condition(A) ::= expression(B).       { clog_ast_statement_list_alloc_expression(parser,&A,B,0); }
 condition(A) ::= VAR ID(B) ASSIGN initializer(C). { clog_ast_statement_list_alloc_declaration(parser,&A,B,C); }
 
-%type expression_statement              { struct clog_ast_statement_list* }
-%destructor expression_statement        { clog_ast_statement_list_free(parser,$$); }
 expression_statement(A) ::= expression(B) SEMI_COLON. { clog_ast_statement_list_alloc_expression(parser,&A,B,1); }
 expression_statement(A) ::= SEMI_COLON.               { A = NULL; }
 
-%type compound_statement              { struct clog_ast_statement_list* }
-%destructor compound_statement        { clog_ast_statement_list_free(parser,$$); }
 compound_statement(A) ::= OPEN_BRACE CLOSE_BRACE.                   { A = NULL; }
 compound_statement(A) ::= OPEN_BRACE statement_list(B) CLOSE_BRACE. { clog_ast_statement_list_alloc_block(parser,&A,B); }
 
@@ -97,21 +82,13 @@ jump_statement ::= CONTINUE SEMI_COLON.
 jump_statement ::= RETURN SEMI_COLON.
 jump_statement ::= RETURN expression SEMI_COLON.
 
-%type declaration_statement                       { struct clog_ast_statement_list* }
-%destructor declaration_statement                 { clog_ast_statement_list_free(parser,$$); }
 declaration_statement(A) ::= variable_declaration(B). { A = B; }
 
-%type variable_declaration                       { struct clog_ast_statement_list* }
-%destructor variable_declaration                 { clog_ast_statement_list_free(parser,$$); }
 variable_declaration(A) ::= VAR init_declarator_list(B) SEMI_COLON. { A = B; }
 
-%type init_declarator_list                       { struct clog_ast_statement_list* }
-%destructor init_declarator_list                 { clog_ast_statement_list_free(parser,$$); }
 init_declarator_list(A) ::= init_declarator(B).  { A = B; }
 init_declarator_list(A) ::= init_declarator_list(B) COMMA init_declarator(C). { A = clog_ast_statement_list_append(parser,B,C); }
 
-%type init_declarator                       { struct clog_ast_statement_list* }
-%destructor init_declarator                 { clog_ast_statement_list_free(parser,$$); }
 init_declarator(A) ::= ID(B) ASSIGN initializer(C). { clog_ast_statement_list_alloc_declaration(parser,&A,B,C); }
 init_declarator(A) ::= ID(B).                       { clog_ast_statement_list_alloc_declaration(parser,&A,B,NULL); }
 
