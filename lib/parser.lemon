@@ -44,7 +44,9 @@ statement(A) ::= dangling_if(B).      { A = B; }
 %destructor simple_statement                 { clog_ast_statement_list_free(parser,$$); }
 simple_statement(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C) ELSE simple_statement(D). { clog_ast_statement_list_alloc_if(parser,&A,B,C,D); } 
 simple_statement(A) ::= WHILE OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C).                       { clog_ast_statement_list_alloc_while(parser,&A,B,C); }
-simple_statement ::= for_statement simple_statement.
+simple_statement(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_COLON expression(D) CLOSE_PAREN simple_statement(E). { clog_ast_statement_list_alloc_for(parser,&A,B,C,D,E); }
+simple_statement(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_COLON CLOSE_PAREN simple_statement(E).               { clog_ast_statement_list_alloc_for(parser,&A,B,C,NULL,E); }
+simple_statement(A) ::= FOR OPEN_PAREN for_init_statement(B) SEMI_COLON expression(D) CLOSE_PAREN simple_statement(E).              { clog_ast_statement_list_alloc_for(parser,&A,B,NULL,D,E); }
 simple_statement(A) ::= DO statement(B) WHILE OPEN_PAREN expression(C) CLOSE_PAREN. { clog_ast_statement_list_alloc_do(parser,&A,C,B); }
 simple_statement(A) ::= expression_statement(B). { A = B; }
 simple_statement(A) ::= compound_statement(B).   { A = B; }
@@ -57,11 +59,9 @@ simple_statement ::= jump_statement.
 dangling_if(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN statement(C).                            { clog_ast_statement_list_alloc_if(parser,&A,B,C,NULL); }
 dangling_if(A) ::= IF OPEN_PAREN condition(B) CLOSE_PAREN simple_statement(C) ELSE dangling_if(D). { clog_ast_statement_list_alloc_if(parser,&A,B,C,D); }
 dangling_if(A) ::= WHILE OPEN_PAREN condition(B) CLOSE_PAREN dangling_if(C).                       { clog_ast_statement_list_alloc_while(parser,&A,B,C); }
-dangling_if ::= for_statement dangling_if.
-
-for_statement ::= FOR OPEN_PAREN for_init_statement condition SEMI_COLON expression CLOSE_PAREN.
-for_statement ::= FOR OPEN_PAREN for_init_statement condition SEMI_COLON CLOSE_PAREN.
-for_statement ::= FOR OPEN_PAREN for_init_statement SEMI_COLON expression CLOSE_PAREN.
+dangling_if(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_COLON expression(D) CLOSE_PAREN dangling_if(E). { clog_ast_statement_list_alloc_for(parser,&A,B,C,D,E); }
+dangling_if(A) ::= FOR OPEN_PAREN for_init_statement(B) condition(C) SEMI_COLON CLOSE_PAREN dangling_if(E).               { clog_ast_statement_list_alloc_for(parser,&A,B,C,NULL,E); }
+dangling_if(A) ::= FOR OPEN_PAREN for_init_statement(B) SEMI_COLON expression(D) CLOSE_PAREN dangling_if(E).              { clog_ast_statement_list_alloc_for(parser,&A,B,NULL,D,E); }
 
 %type for_init_statement                       { struct clog_ast_statement_list* }
 %destructor for_init_statement                 { clog_ast_statement_list_free(parser,$$); }

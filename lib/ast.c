@@ -1448,7 +1448,7 @@ static void clog_ast_statement_list_flatten(struct clog_parser* parser, struct c
 		if (!find)
 		{
 			struct clog_ast_statement_list* l = (*list)->stmt->stmt.block;
-			clog_ast_statement_list_append(parser,l,(*list)->next);
+			l = clog_ast_statement_list_append(parser,l,(*list)->next);
 			(*list)->stmt->stmt.block = NULL;
 			(*list)->next = NULL;
 			clog_ast_statement_list_free(parser,*list);
@@ -1787,7 +1787,7 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 				true_stmt = l;
 			}
 
-			clog_ast_statement_list_append(parser,cond,true_stmt);
+			cond = clog_ast_statement_list_append(parser,cond,true_stmt);
 		}
 		else
 		{
@@ -1801,7 +1801,7 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 				false_stmt = l;
 			}
 
-			clog_ast_statement_list_append(parser,cond,false_stmt);
+			cond = clog_ast_statement_list_append(parser,cond,false_stmt);
 		}
 	}
 	else if (!clog_ast_statement_list_if_alloc(parser,&cond->next,cond->next,true_stmt,false_stmt))
@@ -1948,6 +1948,73 @@ int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_
 	return clog_ast_statement_list_alloc_if(parser,list,cond_stmt,*list,NULL);
 }
 
+int clog_ast_statement_list_alloc_for(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* init_stmt, struct clog_ast_statement_list* cond_stmt, struct clog_ast_expression* iter_expr, struct clog_ast_statement_list* loop_stmt)
+{
+	/* Translate for (A;B;C) {D}  =>  { A; while (B) { D; C; } } */
+	*list = NULL;
+
+	if (!cond_stmt)
+	{
+		/* Empty condition => true */
+		struct clog_ast_literal* lit_true;
+		struct clog_ast_expression* expr_true;
+		if (!clog_ast_literal_alloc_bool(parser,&lit_true,1) ||
+				!clog_ast_expression_alloc_literal(parser,&expr_true,lit_true) ||
+				!clog_ast_statement_list_alloc_expression(parser,&cond_stmt,expr_true,0))
+		{
+			clog_ast_statement_list_free(parser,init_stmt);
+			clog_ast_statement_list_free(parser,cond_stmt);
+			clog_ast_statement_list_free(parser,loop_stmt);
+			return 0;
+		}
+	}
+
+	if (iter_expr)
+	{
+		/* Append iter_expr to loop_stmt */
+		struct clog_ast_statement_list* iter_stmt = NULL;
+		if (!clog_ast_statement_list_alloc_expression(parser,&iter_stmt,iter_expr,1))
+		{
+			clog_ast_statement_list_free(parser,init_stmt);
+			clog_ast_statement_list_free(parser,cond_stmt);
+			clog_ast_statement_list_free(parser,loop_stmt);
+			return 0;
+		}
+
+		loop_stmt = clog_ast_statement_list_append(parser,loop_stmt,iter_stmt);
+	}
+
+	/* Create the while loop */
+	if (!clog_ast_statement_list_alloc_while(parser,list,cond_stmt,loop_stmt))
+		return 0;
+
+	if (init_stmt)
+	{
+		/* Add init_expression at the same scope as any declarations from cond_stmt */
+		if (*list && (*list)->stmt->type == clog_ast_statement_block)
+			(*list)->stmt->stmt.block = clog_ast_statement_list_append(parser,init_stmt,(*list)->stmt->stmt.block);
+		else
+			clog_ast_statement_list_alloc_block(parser,list,clog_ast_statement_list_append(parser,init_stmt,*list));
+	}
+
+	return 1;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 static void clog_ast_indent(size_t indent)
 {
 	size_t t = 0;
@@ -2027,6 +2094,11 @@ static void clog_ast_dump_expr(const struct clog_ast_expression* expr)
 
 		case CLOG_TOKEN_EQUALS:
 			printf(" == ");
+			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
+			break;
+
+		case CLOG_TOKEN_LESS_THAN:
+			printf(" < ");
 			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
 			break;
 
@@ -2134,7 +2206,7 @@ static void clog_ast_dump(size_t indent, const struct clog_ast_statement_list* l
 				printf(";\n");
 			}
 			clog_ast_indent(indent);
-			printf("while (");
+			printf("  while (");
 			clog_ast_dump_expr(list->stmt->stmt.do_stmt->condition);
 			printf(")\n");
 			break;
