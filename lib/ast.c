@@ -1670,10 +1670,24 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		return clog_ast_statement_list_alloc_block(parser,list,cond);
 	}
 
+	/* If we have no true_stmt, negate the cond and swap */
+	if (!true_stmt)
+	{
+		if (!clog_ast_expression_alloc_builtin1(parser,&cond->stmt->stmt.expression,CLOG_TOKEN_EXCLAMATION,cond->stmt->stmt.expression))
+		{
+			cond->stmt = NULL;
+			clog_ast_statement_list_free(parser,cond);
+			clog_ast_statement_list_free(parser,false_stmt);
+			return 0;
+		}
 
-	/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
+		true_stmt = false_stmt;
+		false_stmt = NULL;
+	}
+
 	if (true_stmt)
 	{
+		/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
 		if (true_stmt->stmt->type == clog_ast_statement_declaration)
 		{
 			if (!clog_ast_statement_list_alloc_block(parser,&true_stmt,true_stmt))
@@ -1699,6 +1713,7 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 
 	if (false_stmt)
 	{
+		/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
 		if (false_stmt->stmt->type == clog_ast_statement_declaration)
 		{
 			if (!clog_ast_statement_list_alloc_block(parser,&false_stmt,false_stmt))
@@ -2080,6 +2095,11 @@ static void clog_ast_dump_expr(const struct clog_ast_expression* expr)
 		case CLOG_TOKEN_DOT:
 			printf(".");
 			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
+			break;
+
+		case CLOG_TOKEN_EXCLAMATION:
+			printf("!");
+			clog_ast_dump_expr_b(expr->expr.builtin->args[0]);
 			break;
 
 		case CLOG_TOKEN_QUESTION:
