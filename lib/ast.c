@@ -1607,8 +1607,128 @@ int clog_ast_statement_list_alloc_declaration(struct clog_parser* parser, struct
 	return 1;
 }
 
-static int clog_ast_statement_list_if_alloc(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* cond, struct clog_ast_statement_list* true_stmt, struct clog_ast_statement_list* false_stmt)
+int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* cond, struct clog_ast_statement_list* true_stmt, struct clog_ast_statement_list* false_stmt)
 {
+	*list = NULL;
+
+	if (!cond)
+	{
+		clog_ast_statement_list_free(parser,true_stmt);
+		clog_ast_statement_list_free(parser,false_stmt);
+		return 0;
+	}
+
+	/* Check to see if we have an expression of the kind: if (var x = 12) */
+	if (cond->stmt->type == clog_ast_statement_declaration)
+	{
+		/* We must check to see if an identical declaration occurs in the outermost block of true_stmt and false_stmt */
+		if (true_stmt && true_stmt->stmt->type == clog_ast_statement_block)
+		{
+			struct clog_ast_statement_list* l = true_stmt->stmt->stmt.block;
+			for (;l;l = l->next)
+			{
+				if (l->stmt->type == clog_ast_statement_declaration && clog_ast_literal_compare(l->stmt->stmt.declaration,cond->stmt->stmt.declaration) == 0)
+				{
+					unsigned long line = l->stmt->stmt.declaration->line;
+					clog_ast_statement_list_free(parser,cond);
+					clog_ast_statement_list_free(parser,true_stmt);
+					clog_ast_statement_list_free(parser,false_stmt);
+					return clog_syntax_error(parser,"Variable already declared",line);
+				}
+			}
+		}
+		if (false_stmt && false_stmt->stmt->type == clog_ast_statement_block)
+		{
+			struct clog_ast_statement_list* l = false_stmt->stmt->stmt.block;
+			for (;l;l = l->next)
+			{
+				if (l->stmt->type == clog_ast_statement_declaration && clog_ast_literal_compare(l->stmt->stmt.declaration,cond->stmt->stmt.declaration) == 0)
+				{
+					unsigned long line = l->stmt->stmt.declaration->line;
+					clog_ast_statement_list_free(parser,cond);
+					clog_ast_statement_list_free(parser,true_stmt);
+					clog_ast_statement_list_free(parser,false_stmt);
+					return clog_syntax_error(parser,"Variable already declared",line);
+				}
+			}
+		}
+
+		/* Now rewrite if (var x = 1) ... => { var x; if (x = 1) ... } */
+		if (!clog_ast_statement_list_alloc_if(parser,&cond->next,cond->next,true_stmt,false_stmt))
+		{
+			clog_ast_statement_list_free(parser,cond);
+			return 0;
+		}
+
+		return clog_ast_statement_list_alloc_block(parser,list,cond);
+	}
+
+	/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
+	if (true_stmt && true_stmt->stmt->type == clog_ast_statement_declaration)
+	{
+		if (!clog_ast_statement_list_alloc_block(parser,&true_stmt,true_stmt))
+		{
+			clog_ast_statement_list_free(parser,cond);
+			clog_ast_statement_list_free(parser,false_stmt);
+			return 0;
+		}
+	}
+	if (false_stmt && false_stmt->stmt->type == clog_ast_statement_declaration)
+	{
+		if (!clog_ast_statement_list_alloc_block(parser,&false_stmt,false_stmt))
+		{
+			clog_ast_statement_list_free(parser,cond);
+			clog_ast_statement_list_free(parser,true_stmt);
+			return 0;
+		}
+	}
+
+	/* Eliminate constant expressions in the clauses */
+	if (true_stmt && clog_ast_statement_list_is_const(true_stmt))
+	{
+		clog_ast_statement_list_free(parser,true_stmt);
+		true_stmt = NULL;
+	}
+	if (false_stmt && clog_ast_statement_list_is_const(false_stmt))
+	{
+		clog_ast_statement_list_free(parser,false_stmt);
+		false_stmt = NULL;
+	}
+
+	/* If we have no result statements, see if the comparison is constant */
+	if (!true_stmt && !false_stmt)
+	{
+		if (clog_ast_statement_list_is_const(cond))
+		{
+			/* We can eliminate this if */
+			clog_ast_statement_list_free(parser,cond);
+		}
+		else
+		{
+			/* Otherwise replace with a statement */
+			*list = cond;
+		}
+		return 1;
+	}
+
+	/* Check for literal condition */
+	if (cond->stmt->stmt.expression->type == clog_ast_expression_literal)
+	{
+		if (clog_ast_literal_bool_cast(cond->stmt->stmt.expression->expr.literal))
+		{
+			*list = true_stmt;
+			clog_ast_statement_list_free(parser,false_stmt);
+		}
+		else
+		{
+			*list = false_stmt;
+			clog_ast_statement_list_free(parser,true_stmt);
+		}
+
+		clog_ast_statement_list_free(parser,cond);
+		return 1;
+	}
+
 	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_if))
 	{
 		clog_ast_statement_list_free(parser,cond);
@@ -1642,164 +1762,6 @@ static int clog_ast_statement_list_if_alloc(struct clog_parser* parser, struct c
 	return 1;
 }
 
-int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* cond, struct clog_ast_statement_list* true_stmt, struct clog_ast_statement_list* false_stmt)
-{
-	*list = NULL;
-
-	if (!cond)
-	{
-		clog_ast_statement_list_free(parser,true_stmt);
-		clog_ast_statement_list_free(parser,false_stmt);
-		return 0;
-	}
-
-	/* Eliminate constant expressions in the clauses */
-	if (true_stmt && clog_ast_statement_list_is_const(true_stmt))
-	{
-		clog_ast_statement_list_free(parser,true_stmt);
-		true_stmt = NULL;
-	}
-	if (false_stmt && clog_ast_statement_list_is_const(false_stmt))
-	{
-		clog_ast_statement_list_free(parser,false_stmt);
-		false_stmt = NULL;
-	}
-
-	/* If we have no result statements, see if the comparison is constant */
-	if (!true_stmt && !false_stmt)
-	{
-		if (clog_ast_statement_list_is_const(cond))
-		{
-			/* We can eliminate this if */
-			clog_ast_statement_list_free(parser,cond);
-		}
-		else
-		{
-			/* Otherwise replace with a statement */
-			*list = cond;
-		}
-		return 1;
-	}
-
-	/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
-	if (true_stmt && true_stmt->stmt->type == clog_ast_statement_declaration)
-	{
-		if (!clog_ast_statement_list_alloc_block(parser,&true_stmt,true_stmt))
-		{
-			clog_ast_statement_list_free(parser,cond);
-			clog_ast_statement_list_free(parser,false_stmt);
-			return 0;
-		}
-	}
-	if (false_stmt && false_stmt->stmt->type == clog_ast_statement_declaration)
-	{
-		if (!clog_ast_statement_list_alloc_block(parser,&false_stmt,false_stmt))
-		{
-			clog_ast_statement_list_free(parser,cond);
-			clog_ast_statement_list_free(parser,true_stmt);
-			return 0;
-		}
-	}
-
-	/* Check for literal condition */
-	if (cond->stmt->stmt.expression->type == clog_ast_expression_literal)
-	{
-		if (clog_ast_literal_bool_cast(cond->stmt->stmt.expression->expr.literal))
-		{
-			*list = true_stmt;
-			clog_ast_statement_list_free(parser,false_stmt);
-		}
-		else
-		{
-			*list = false_stmt;
-			clog_ast_statement_list_free(parser,true_stmt);
-		}
-
-		clog_ast_statement_list_free(parser,cond);
-		return 1;
-	}
-
-	/* Check to see if we have an expression of the kind: if (var x = 12) */
-	if (cond->stmt->type != clog_ast_statement_declaration)
-		return clog_ast_statement_list_if_alloc(parser,list,cond,true_stmt,false_stmt);
-
-	/* We must check to see if an identical declaration occurs in the outermost block of true_stmt and false_stmt */
-	if (true_stmt && true_stmt->stmt->type == clog_ast_statement_block)
-	{
-		struct clog_ast_statement_list* l = true_stmt->stmt->stmt.block;
-		for (;l;l = l->next)
-		{
-			if (l->stmt->type == clog_ast_statement_declaration && clog_ast_literal_compare(l->stmt->stmt.declaration,cond->stmt->stmt.declaration) == 0)
-			{
-				unsigned long line = l->stmt->stmt.declaration->line;
-				clog_ast_statement_list_free(parser,cond);
-				clog_ast_statement_list_free(parser,true_stmt);
-				clog_ast_statement_list_free(parser,false_stmt);
-				return clog_syntax_error(parser,"Variable already declared",line);
-			}
-		}
-	}
-	if (false_stmt && false_stmt->stmt->type == clog_ast_statement_block)
-	{
-		struct clog_ast_statement_list* l = false_stmt->stmt->stmt.block;
-		for (;l;l = l->next)
-		{
-			if (l->stmt->type == clog_ast_statement_declaration && clog_ast_literal_compare(l->stmt->stmt.declaration,cond->stmt->stmt.declaration) == 0)
-			{
-				unsigned long line = l->stmt->stmt.declaration->line;
-				clog_ast_statement_list_free(parser,cond);
-				clog_ast_statement_list_free(parser,true_stmt);
-				clog_ast_statement_list_free(parser,false_stmt);
-				return clog_syntax_error(parser,"Variable already declared",line);
-			}
-		}
-	}
-
-	/* Check for var x = const_expr */
-	if (clog_ast_statement_list_is_const(cond) &&
-			cond->next->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_literal)
-	{
-		if (clog_ast_literal_bool_cast(cond->next->stmt->stmt.expression->expr.builtin->args[1]->expr.literal))
-		{
-			clog_ast_statement_list_free(parser,false_stmt);
-
-			if (true_stmt && true_stmt->stmt->type == clog_ast_statement_block)
-			{
-				struct clog_ast_statement_list* l = true_stmt->stmt->stmt.block;
-				true_stmt->stmt->stmt.block = NULL;
-				clog_ast_statement_list_free(parser,true_stmt);
-				true_stmt = l;
-			}
-
-			cond = clog_ast_statement_list_append(parser,cond,true_stmt);
-		}
-		else
-		{
-			clog_ast_statement_list_free(parser,true_stmt);
-
-			if (false_stmt && false_stmt->stmt->type == clog_ast_statement_block)
-			{
-				struct clog_ast_statement_list* l = false_stmt->stmt->stmt.block;
-				false_stmt->stmt->stmt.block = NULL;
-				clog_ast_statement_list_free(parser,false_stmt);
-				false_stmt = l;
-			}
-
-			cond = clog_ast_statement_list_append(parser,cond,false_stmt);
-		}
-	}
-	else if (!clog_ast_statement_list_if_alloc(parser,&cond->next,cond->next,true_stmt,false_stmt))
-	{
-		/* Now rewrite if (var x = 1) ... => { var x; if (x = 1) ... } */
-		clog_ast_statement_list_free(parser,cond);
-		clog_ast_statement_list_free(parser,true_stmt);
-		clog_ast_statement_list_free(parser,false_stmt);
-		return 0;
-	}
-
-	return clog_ast_statement_list_alloc_block(parser,list,cond);
-}
-
 int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_expression* cond, struct clog_ast_statement_list* loop_stmt)
 {
 	*list = NULL;
@@ -1808,6 +1770,16 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 	{
 		clog_ast_statement_list_free(parser,loop_stmt);
 		return 0;
+	}
+
+	/* Rewrite to force compound statements: do var i while(1)  =>  do { var i; } while(1) */
+	if (loop_stmt->stmt->type == clog_ast_statement_declaration)
+	{
+		if (!clog_ast_statement_list_alloc_block(parser,&loop_stmt,loop_stmt))
+		{
+			clog_ast_expression_free(parser,cond);
+			return 0;
+		}
 	}
 
 	/* Eliminate constant expressions in the loop */
@@ -1822,16 +1794,6 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 	{
 		/* Replace with a statement */
 		return clog_ast_statement_list_alloc_expression(parser,list,cond,1);
-	}
-
-	/* Rewrite to force compound statements: do var i while(1)  =>  do { var i; } while(1) */
-	if (loop_stmt->stmt->type == clog_ast_statement_declaration)
-	{
-		if (!clog_ast_statement_list_alloc_block(parser,&loop_stmt,loop_stmt))
-		{
-			clog_ast_expression_free(parser,cond);
-			return 0;
-		}
 	}
 
 	/* Check for literal condition */
@@ -1957,15 +1919,18 @@ int clog_ast_statement_list_alloc_for(struct clog_parser* parser, struct clog_as
 
 	/* Create the while loop */
 	if (!clog_ast_statement_list_alloc_while(parser,list,cond_stmt,loop_stmt))
+	{
+		clog_ast_statement_list_free(parser,init_stmt);
 		return 0;
+	}
 
 	if (init_stmt)
 	{
 		/* Add init_expression at the same scope as any declarations from cond_stmt */
 		if (*list && (*list)->stmt->type == clog_ast_statement_block)
 			(*list)->stmt->stmt.block = clog_ast_statement_list_append(parser,init_stmt,(*list)->stmt->stmt.block);
-		else
-			clog_ast_statement_list_alloc_block(parser,list,clog_ast_statement_list_append(parser,init_stmt,*list));
+		else if (!clog_ast_statement_list_alloc_block(parser,list,clog_ast_statement_list_append(parser,init_stmt,*list)))
+			return 0;
 	}
 
 	return 1;
