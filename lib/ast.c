@@ -1545,14 +1545,24 @@ int clog_ast_statement_list_alloc_declaration(struct clog_parser* parser, struct
 		return 0;
 	}
 
-	if (init)
+	/* transform var x; => var x; x = null; */
+	if (!init)
 	{
-		if (!clog_token_alloc(parser,&id2,id->value.string.str,id->value.string.len))
+		struct clog_ast_literal* lit_null;
+		if (!clog_ast_literal_alloc(parser,&lit_null,NULL) ||
+				!clog_ast_expression_alloc_literal(parser,&init,lit_null))
 		{
 			clog_token_free(parser,id);
-			clog_ast_expression_free(parser,init);
 			return 0;
 		}
+		lit_null->line = parser->line;
+	}
+
+	if (!clog_token_alloc(parser,&id2,id->value.string.str,id->value.string.len))
+	{
+		clog_token_free(parser,id);
+		clog_ast_expression_free(parser,init);
+		return 0;
 	}
 
 	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_declaration))
@@ -1572,36 +1582,33 @@ int clog_ast_statement_list_alloc_declaration(struct clog_parser* parser, struct
 		return 0;
 	}
 
-	if (init)
+	/* Transform var x = 3; => var x; x = 3; */
+	struct clog_ast_expression* id_expr;
+	struct clog_ast_expression* assign_expr;
+
+	if (!clog_ast_expression_alloc_id(parser,&id_expr,id2))
 	{
-		/* Transform var x = 3; => var x; x = 3; */
-		struct clog_ast_expression* id_expr;
-		struct clog_ast_expression* assign_expr;
+		clog_ast_expression_free(parser,init);
+		clog_ast_statement_list_free(parser,*list);
+		*list = NULL;
+		return 0;
+	}
 
-		if (!clog_ast_expression_alloc_id(parser,&id_expr,id2))
-		{
-			clog_ast_expression_free(parser,init);
-			clog_ast_statement_list_free(parser,*list);
-			*list = NULL;
-			return 0;
-		}
+	if (!clog_ast_expression_alloc_assign(parser,&assign_expr,CLOG_TOKEN_ASSIGN,id_expr,init))
+	{
+		clog_ast_statement_list_free(parser,*list);
+		*list = NULL;
+		return 0;
+	}
 
-		if (!clog_ast_expression_alloc_assign(parser,&assign_expr,CLOG_TOKEN_ASSIGN,id_expr,init))
-		{
-			clog_ast_statement_list_free(parser,*list);
-			*list = NULL;
-			return 0;
-		}
+	/* There are no side-effects on a local variable declaration */
+	assign_expr->constant = init->constant;
 
-		/* There are no side-effects on a local variable declaration */
-		assign_expr->constant = init->constant;
-
-		if (!clog_ast_statement_list_alloc_expression(parser,&(*list)->next,assign_expr,0))
-		{
-			clog_ast_statement_list_free(parser,*list);
-			*list = NULL;
-			return 0;
-		}
+	if (!clog_ast_statement_list_alloc_expression(parser,&(*list)->next,assign_expr,0))
+	{
+		clog_ast_statement_list_free(parser,*list);
+		*list = NULL;
+		return 0;
 	}
 
 	return 1;
@@ -1896,10 +1903,10 @@ int clog_ast_statement_list_alloc_for(struct clog_parser* parser, struct clog_as
 				!clog_ast_statement_list_alloc_expression(parser,&cond_stmt,expr_true,0))
 		{
 			clog_ast_statement_list_free(parser,init_stmt);
-			clog_ast_statement_list_free(parser,cond_stmt);
 			clog_ast_statement_list_free(parser,loop_stmt);
 			return 0;
 		}
+		lit_true->line = parser->line;
 	}
 
 	if (iter_expr)

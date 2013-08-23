@@ -27,6 +27,7 @@
 %default_destructor { clog_ast_statement_list_free(parser,$$); }
 
 program ::= statement_list(A). { parser->pgm = A; }
+program ::= .                  { parser->pgm = NULL; }
 
 statement_list(A) ::= statement(B).                   { A = B; }
 statement_list(A) ::= statement_list(B) statement(C). { A = clog_ast_statement_list_append(parser,B,C); }
