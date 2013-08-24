@@ -87,7 +87,7 @@ void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_pars
 		'>' => { push_token(parser,lemon,CLOG_TOKEN_GREATER_THAN); };
 		'>=' => { push_token(parser,lemon,CLOG_TOKEN_GREATER_THAN_EQUALS); };
 		'='  => { push_token(parser,lemon,CLOG_TOKEN_ASSIGN); };
-		':=' => { push_token(parser,lemon,CLOG_TOKEN_COLON_ASSIGN); };
+#		':=' => { push_token(parser,lemon,CLOG_TOKEN_COLON_ASSIGN); };
 		'*=' => { push_token(parser,lemon,CLOG_TOKEN_STAR_ASSIGN); };
 		'/=' => { push_token(parser,lemon,CLOG_TOKEN_SLASH_ASSIGN); };
 		'%=' => { push_token(parser,lemon,CLOG_TOKEN_PERCENT_ASSIGN); };

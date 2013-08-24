@@ -112,7 +112,7 @@ expression(A) ::= expression(B) COMMA assignment_expression(C). { clog_ast_expre
 assignment_expression(A) ::= conditional_expression(B). { A = B; }
 assignment_expression(A) ::= throw_expression(B).       { A = B; }
 assignment_expression(A) ::= logical_OR_expression(B) ASSIGN assignment_expression(C).               { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) COLON_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_COLON_ASSIGN,B,C); }
+/*assignment_expression(A) ::= logical_OR_expression(B) COLON_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_COLON_ASSIGN,B,C); }*/
 assignment_expression(A) ::= logical_OR_expression(B) STAR_ASSIGN assignment_expression(C).          { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_STAR_ASSIGN,B,C); }
 assignment_expression(A) ::= logical_OR_expression(B) SLASH_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_SLASH_ASSIGN,B,C); }
 assignment_expression(A) ::= logical_OR_expression(B) PERCENT_ASSIGN assignment_expression(C).       { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_PERCENT_ASSIGN,B,C); }

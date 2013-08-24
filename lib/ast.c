@@ -78,7 +78,7 @@ void clog_ast_literal_free(struct clog_parser* parser, struct clog_ast_literal* 
 	}
 }
 
-static int clog_ast_literal_clone(struct clog_parser* parser, struct clog_ast_literal** new, struct clog_ast_literal* lit)
+static int clog_ast_literal_clone(struct clog_parser* parser, struct clog_ast_literal** new, const struct clog_ast_literal* lit)
 {
 	*new = NULL;
 
@@ -277,10 +277,31 @@ static int clog_ast_literal_arith_convert(struct clog_ast_literal* lit1, struct 
 
 static int clog_ast_literal_compare(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2)
 {
-	if (!lit1 || !lit2)
-		return 0;
+	if (lit1 && lit2)
+	{
+		if (lit1->type == clog_ast_literal_string && lit2->type == clog_ast_literal_string)
+		{
+			int i = memcmp(lit1->value.string.str,lit2->value.string.str,lit1->value.string.len < lit2->value.string.len ? lit1->value.string.len : lit2->value.string.len);
+			if (i != 0)
+				return (i > 0 ? 1 : -1);
 
-	if (lit1->type == clog_ast_literal_string && lit2->type == clog_ast_literal_string)
+			return (lit1->value.string.len > lit2->value.string.len ? 1 : (lit1->value.string.len == lit2->value.string.len ? 0 : -1));
+		}
+
+		if (clog_ast_literal_arith_convert(lit1,lit2))
+		{
+			if (lit1->type == clog_ast_literal_real)
+				return (lit1->value.real > lit2->value.real ? 1 : (lit1->value.real == lit2->value.real ? 0 : -1));
+
+			return (lit1->value.integer > lit2->value.integer ? 1 : (lit1->value.integer == lit2->value.integer ? 0 : -1));
+		}
+	}
+	return -2;
+}
+
+static int clog_ast_literal_id_compare(const struct clog_ast_literal* lit1, const struct clog_ast_literal* lit2)
+{
+	if (lit1 && lit2 && lit1->type == clog_ast_literal_string && lit2->type == clog_ast_literal_string)
 	{
 		int i = memcmp(lit1->value.string.str,lit2->value.string.str,lit1->value.string.len < lit2->value.string.len ? lit1->value.string.len : lit2->value.string.len);
 		if (i != 0)
@@ -288,15 +309,6 @@ static int clog_ast_literal_compare(struct clog_ast_literal* lit1, struct clog_a
 
 		return (lit1->value.string.len > lit2->value.string.len ? 1 : (lit1->value.string.len == lit2->value.string.len ? 0 : -1));
 	}
-
-	if (clog_ast_literal_arith_convert(lit1,lit2))
-	{
-		if (lit1->type == clog_ast_literal_real)
-			return (lit1->value.real > lit2->value.real ? 1 : (lit1->value.real == lit2->value.real ? 0 : -1));
-
-		return (lit1->value.integer > lit2->value.integer ? 1 : (lit1->value.integer == lit2->value.integer ? 0 : -1));
-	}
-
 	return -2;
 }
 
@@ -522,14 +534,6 @@ int clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_ex
 		return 0;
 	}
 
-	if (!p1->lvalue)
-	{
-		unsigned long line = clog_ast_expression_line(p1);
-		clog_ast_expression_free(parser,p1);
-		clog_token_free(parser,token);
-		return clog_syntax_error(parser,". requires an lvalue",line);
-	}
-
 	if (!clog_ast_expression_alloc_id(parser,&p2,token))
 	{
 		clog_ast_expression_free(parser,p1);
@@ -573,93 +577,6 @@ int clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_a
 	if (!p1)
 		return 0;
 
-	switch (type)
-	{
-	case CLOG_TOKEN_DOUBLE_PLUS:
-	case CLOG_TOKEN_DOUBLE_MINUS:
-		if (!p1->lvalue)
-		{
-			unsigned long line = clog_ast_expression_line(p1);
-			clog_ast_expression_free(parser,p1);
-			return clog_syntax_error(parser,type == CLOG_TOKEN_DOUBLE_PLUS ? "++ requires an lvalue" :  "++ requires an lvalue",line);
-		}
-		break;
-
-	case CLOG_TOKEN_PLUS:
-		if (p1->type == clog_ast_expression_literal)
-		{
-			/* Unary + */
-			if (p1->expr.literal->type != clog_ast_literal_integer &&
-				p1->expr.literal->type != clog_ast_literal_real)
-			{
-				unsigned long line = clog_ast_expression_line(p1);
-				clog_ast_expression_free(parser,p1);
-				return clog_syntax_error(parser,"+ requires a number",line);
-			}
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_MINUS:
-		if (p1->type == clog_ast_expression_literal)
-		{
-			/* Unary - */
-			switch (p1->expr.literal->type)
-			{
-			case clog_ast_literal_integer:
-				p1->expr.literal->value.integer = -p1->expr.literal->value.integer;
-				break;
-
-			case clog_ast_literal_real:
-				p1->expr.literal->value.real = -p1->expr.literal->value.real;
-				break;
-
-			default:
-				{
-					unsigned long line = clog_ast_expression_line(p1);
-					clog_ast_expression_free(parser,p1);
-					return clog_syntax_error(parser,"- requires a number",line);
-				}
-			}
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_EXCLAMATION:
-		/* Logical NOT */
-		if (p1->type == clog_ast_expression_literal)
-		{
-			clog_ast_literal_bool_promote(p1->expr.literal);
-			p1->expr.literal->value.integer = (p1->expr.literal->value.integer == 0 ? 1 : 0);
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_TILDA:
-		/* Bitwise 1s complement */
-		if (p1->type == clog_ast_expression_literal)
-		{
-			if (!clog_ast_literal_int_promote(p1->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p1);
-				clog_ast_expression_free(parser,p1);
-				return clog_syntax_error(parser,"~ requires integer",line);
-			}
-
-			p1->expr.literal->value.integer = ~p1->expr.literal->value.integer;
-			p1->expr.literal->type = clog_ast_literal_integer;
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	default:
-		break;
-	}
-
 	return clog_ast_expression_alloc_builtin3(parser,expr,type,p1,NULL,NULL);
 }
 
@@ -672,345 +589,6 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 		clog_ast_expression_free(parser,p1);
 		clog_ast_expression_free(parser,p2);
 		return 0;
-	}
-
-	switch (type)
-	{
-	case CLOG_TOKEN_OPEN_BRACKET:
-		if (!p1->lvalue)
-		{
-			unsigned long line = clog_ast_expression_line(p1);
-			clog_ast_expression_free(parser,p1);
-			clog_ast_expression_free(parser,p2);
-			return clog_syntax_error(parser,"Subscript requires an lvalue",line);
-		}
-		break;
-
-	case CLOG_TOKEN_PLUS:
-		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
-		{
-			if (p1->expr.literal->type == clog_ast_literal_string && p2->expr.literal->type == clog_ast_literal_string)
-			{
-				if (!p1->expr.literal->value.string.len)
-				{
-					clog_ast_expression_free(parser,p1);
-					*expr = p2;
-					return 1;
-				}
-
-				if (p2->expr.literal->value.string.len)
-				{
-					unsigned char* sz = clog_realloc(p1->expr.literal->value.string.str,p1->expr.literal->value.string.len + p2->expr.literal->value.string.len);
-					if (!sz)
-					{
-						clog_ast_expression_free(parser,p1);
-						clog_ast_expression_free(parser,p2);
-						return clog_out_of_memory(parser);
-					}
-
-					memcpy(sz+p1->expr.literal->value.string.len,p2->expr.literal->value.string.str,p2->expr.literal->value.string.len);
-					p1->expr.literal->value.string.str = sz;
-					p1->expr.literal->value.string.len += p2->expr.literal->value.string.len;
-				}
-
-				clog_ast_expression_free(parser,p2);
-				*expr = p1;
-				return 1;
-			}
-
-			if (p1->expr.literal->type != clog_ast_literal_string && p2->expr.literal->type != clog_ast_literal_string)
-			{
-				if (!clog_ast_literal_arith_convert(p1->expr.literal,p2->expr.literal))
-				{
-					unsigned long line = clog_ast_expression_line(p1);
-					clog_ast_expression_free(parser,p1);
-					clog_ast_expression_free(parser,p2);
-					return clog_syntax_error(parser,"+ requires  numbers or strings",line);
-				}
-
-				if (p1->expr.literal->type == clog_ast_literal_real)
-					p1->expr.literal->value.real += p2->expr.literal->value.real;
-				else
-					p1->expr.literal->value.integer += p2->expr.literal->value.integer;
-
-				clog_ast_expression_free(parser,p2);
-				*expr = p1;
-				return 1;
-			}
-		}
-		break;
-
-	case CLOG_TOKEN_MINUS:
-		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
-		{
-			if (!clog_ast_literal_arith_convert(p1->expr.literal,p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p1);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"- requires numbers",line);
-			}
-
-			if (p1->expr.literal->type == clog_ast_literal_real)
-				p1->expr.literal->value.real -= p2->expr.literal->value.real;
-			else
-				p1->expr.literal->value.integer -= p2->expr.literal->value.integer;
-
-			clog_ast_expression_free(parser,p2);
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_STAR:
-		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
-		{
-			if (!clog_ast_literal_arith_convert(p1->expr.literal,p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p1);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"* requires numbers",line);
-			}
-
-			if (p1->expr.literal->type == clog_ast_literal_real)
-				p1->expr.literal->value.real *= p2->expr.literal->value.real;
-			else
-				p1->expr.literal->value.integer *= p2->expr.literal->value.integer;
-
-			clog_ast_expression_free(parser,p2);
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_SLASH:
-		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
-		{
-			if (!clog_ast_literal_arith_convert(p1->expr.literal,p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p1);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"/ requires numbers",line);
-			}
-
-			if (p1->expr.literal->type == clog_ast_literal_real)
-			{
-				if (p2->expr.literal->value.real == 0.0)
-				{
-					unsigned long line = clog_ast_expression_line(p2);
-					clog_ast_expression_free(parser,p1);
-					clog_ast_expression_free(parser,p2);
-					return clog_syntax_error(parser,"Division by 0.0",line);
-				}
-				p1->expr.literal->value.real /= p2->expr.literal->value.real;
-			}
-			else
-			{
-				if (p2->expr.literal->value.integer == 0)
-				{
-					unsigned long line = clog_ast_expression_line(p2);
-					clog_ast_expression_free(parser,p1);
-					clog_ast_expression_free(parser,p2);
-					return clog_syntax_error(parser,"Division by 0",line);
-				}
-				p1->expr.literal->value.integer /= p2->expr.literal->value.integer;
-			}
-			clog_ast_expression_free(parser,p2);
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_PERCENT:
-		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
-		{
-			if (!clog_ast_literal_int_promote(p1->expr.literal) ||
-					!clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p1);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"% requires integers",line);
-			}
-
-			p1->expr.literal->value.integer %= p2->expr.literal->value.integer;
-			clog_ast_expression_free(parser,p2);
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_RIGHT_SHIFT:
-	case CLOG_TOKEN_LEFT_SHIFT:
-		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
-		{
-			unsigned long line = clog_ast_expression_line(p1);
-			if (clog_ast_literal_int_promote(p1->expr.literal) && clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				if (type == CLOG_TOKEN_RIGHT_SHIFT)
-					p1->expr.literal->value.integer >>= p2->expr.literal->value.integer;
-				else
-					p1->expr.literal->value.integer <<= p2->expr.literal->value.integer;
-
-				clog_ast_expression_free(parser,p2);
-				*expr = p1;
-				return 1;
-			}
-			clog_ast_expression_free(parser,p1);
-			clog_ast_expression_free(parser,p2);
-			return clog_syntax_error(parser,type == CLOG_TOKEN_RIGHT_SHIFT ? ">> requires integers" : "<< requires integers",line);
-		}
-		break;
-
-	case CLOG_TOKEN_LESS_THAN:
-	case CLOG_TOKEN_GREATER_THAN:
-	case CLOG_TOKEN_LESS_THAN_EQUALS:
-	case CLOG_TOKEN_GREATER_THAN_EQUALS:
-	case CLOG_TOKEN_EQUALS:
-	case CLOG_TOKEN_NOT_EQUALS:
-		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
-		{
-			unsigned long line = clog_ast_expression_line(p1);
-			int b = clog_ast_literal_compare(p1->expr.literal,p2->expr.literal);
-			if (b == -2)
-			{
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-			}
-
-			switch (type)
-			{
-			case CLOG_TOKEN_LESS_THAN:
-				if (b == -2)
-					return clog_syntax_error(parser,"< requires numbers or strings",line);
-				p1->expr.literal->value.integer = (b < 0 ? 1 : 0);
-				break;
-
-			case CLOG_TOKEN_GREATER_THAN:
-				if (b == -2)
-					return clog_syntax_error(parser,"> requires numbers or strings",line);
-				p1->expr.literal->value.integer = (b > 0 ? 1 : 0);
-				break;
-
-			case CLOG_TOKEN_LESS_THAN_EQUALS:
-				if (b == -2)
-					return clog_syntax_error(parser,"<= requires numbers or strings",line);
-				p1->expr.literal->value.integer = (b <= 0 ? 1 : 0);
-				break;
-
-			case CLOG_TOKEN_GREATER_THAN_EQUALS:
-				if (b == -2)
-					return clog_syntax_error(parser,">= requires numbers or strings",line);
-				p1->expr.literal->value.integer = (b >= 0 ? 1 : 0);
-				break;
-
-			case CLOG_TOKEN_EQUALS:
-				if (b == -2)
-					return clog_syntax_error(parser,"== requires numbers or strings",line);
-				p1->expr.literal->value.integer = (b == 0 ? 1 : 0);
-				break;
-
-			case CLOG_TOKEN_NOT_EQUALS:
-				if (b == -2)
-					return clog_syntax_error(parser,"!= requires numbers or strings",line);
-				p1->expr.literal->value.integer = (b != 0 ? 1 : 0);
-				break;
-			}
-
-			p1->expr.literal->type = clog_ast_literal_bool;
-			clog_ast_expression_free(parser,p2);
-			*expr = p1;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_COMMA:
-		if (p1->constant)
-		{
-			clog_ast_expression_free(parser,p1);
-			*expr = p2;
-			return 1;
-		}
-		break;
-
-	case CLOG_TOKEN_AND:
-		if (p1->type == clog_ast_expression_literal)
-		{
-			clog_ast_literal_bool_promote(p1->expr.literal);
-			if (p1->expr.literal->value.integer)
-			{
-				if (p2->type == clog_ast_expression_literal)
-					clog_ast_literal_bool_promote(p2->expr.literal);
-
-				clog_ast_expression_free(parser,p1);
-				*expr = p2;
-				return 1;
-			}
-			else
-			{
-				clog_ast_expression_free(parser,p2);
-				*expr = p1;
-				return 1;
-			}
-		}
-		break;
-
-	case CLOG_TOKEN_OR:
-		if (p1->type == clog_ast_expression_literal)
-		{
-			clog_ast_literal_bool_promote(p1->expr.literal);
-			if (!p1->expr.literal->value.integer)
-			{
-				if (p2->type == clog_ast_expression_literal)
-					clog_ast_literal_bool_promote(p2->expr.literal);
-
-				clog_ast_expression_free(parser,p1);
-				*expr = p2;
-				return 1;
-			}
-			else
-			{
-				clog_ast_expression_free(parser,p2);
-				*expr = p1;
-				return 1;
-			}
-		}
-		break;
-
-	case CLOG_TOKEN_BAR:
-	case CLOG_TOKEN_CARET:
-	case CLOG_TOKEN_AMPERSAND:
-		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
-		{
-			unsigned long line = clog_ast_expression_line(p1);
-			if (clog_ast_literal_int_promote(p1->expr.literal) && clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				if (type == CLOG_TOKEN_BAR)
-					p1->expr.literal->value.integer |= p2->expr.literal->value.integer;
-				else if (type == CLOG_TOKEN_CARET)
-					p1->expr.literal->value.integer ^= p2->expr.literal->value.integer;
-				else
-					p1->expr.literal->value.integer &= p2->expr.literal->value.integer;
-
-				clog_ast_expression_free(parser,p2);
-				*expr = p1;
-				return 1;
-			}
-			clog_ast_expression_free(parser,p1);
-			clog_ast_expression_free(parser,p2);
-			if (type == CLOG_TOKEN_BAR)
-				return clog_syntax_error(parser,"| requires integers",line);
-			else if (type == CLOG_TOKEN_CARET)
-				return clog_syntax_error(parser,"^ requires integers",line);
-			else
-				return clog_syntax_error(parser,"& requires integers",line);
-		}
-		break;
-
-	default:
-		break;
 	}
 
 	return clog_ast_expression_alloc_builtin3(parser,expr,type,p1,p2,NULL);
@@ -1028,23 +606,6 @@ int clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_a
 			clog_ast_expression_free(parser,p2);
 			clog_ast_expression_free(parser,p3);
 			return 0;
-		}
-
-		if (p1->type == clog_ast_expression_literal)
-		{
-			if (clog_ast_literal_bool_cast(p1->expr.literal))
-			{
-				clog_ast_expression_free(parser,p3);
-				*expr = p2;
-			}
-			else
-			{
-				clog_ast_expression_free(parser,p2);
-				*expr = p3;
-			}
-
-			clog_ast_expression_free(parser,p1);
-			return 1;
 		}
 	}
 
@@ -1085,129 +646,7 @@ int clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_a
 
 int clog_ast_expression_alloc_assign(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
 {
-	*expr = NULL;
-
-	if (!p1 || !p2)
-	{
-		clog_ast_expression_free(parser,p1);
-		clog_ast_expression_free(parser,p2);
-		return 0;
-	}
-
-	if (!p1->lvalue)
-	{
-		unsigned long line = clog_ast_expression_line(p1);
-		clog_ast_expression_free(parser,p1);
-		clog_ast_expression_free(parser,p2);
-		return clog_syntax_error(parser,"Assignment requires an lvalue",line);
-	}
-
-	if (p2->type == clog_ast_expression_literal)
-	{
-		switch (type)
-		{
-		case CLOG_TOKEN_STAR_ASSIGN:
-			if (p2->expr.literal->type != clog_ast_literal_real && !clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"*= requires a number",line);
-			}
-			break;
-
-		case CLOG_TOKEN_SLASH_ASSIGN:
-			if (p2->expr.literal->type == clog_ast_literal_real && p2->expr.literal->value.real == 0.0)
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"Division by 0.0",line);
-			}
-			else if (!clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"/= requires a number",line);
-			}
-			else if (p2->expr.literal->value.integer == 0)
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"Division by 0",line);
-			}
-			break;
-
-		case CLOG_TOKEN_PERCENT_ASSIGN:
-			if (!clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"%= requires an integer",line);
-			}
-			break;
-
-		case CLOG_TOKEN_PLUS_ASSIGN:
-			if (p2->expr.literal->type != clog_ast_literal_string &&
-					p2->expr.literal->type != clog_ast_literal_real &&
-					!clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"+= requires a number",line);
-			}
-			break;
-
-		case CLOG_TOKEN_MINUS_ASSIGN:
-			if (p2->expr.literal->type != clog_ast_literal_real && !clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,"-= requires a number",line);
-			}
-			break;
-
-		case CLOG_TOKEN_RIGHT_SHIFT_ASSIGN:
-		case CLOG_TOKEN_LEFT_SHIFT_ASSIGN:
-			if (!clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				return clog_syntax_error(parser,type == CLOG_TOKEN_RIGHT_SHIFT_ASSIGN ? ">>= requires an integer" : "<<= requires an integer",line);
-			}
-			break;
-
-		case CLOG_TOKEN_AMPERSAND_ASSIGN:
-		case CLOG_TOKEN_BITWISE_CARET_ASSIGN:
-		case CLOG_TOKEN_BAR_ASSIGN:
-			if (!clog_ast_literal_int_promote(p2->expr.literal))
-			{
-				unsigned long line = clog_ast_expression_line(p2);
-				clog_ast_expression_free(parser,p1);
-				clog_ast_expression_free(parser,p2);
-				if (type == CLOG_TOKEN_BAR_ASSIGN)
-					return clog_syntax_error(parser,"|= requires an integer",line);
-				else if (type == CLOG_TOKEN_BITWISE_CARET_ASSIGN)
-					return clog_syntax_error(parser,"^= requires an integer",line);
-				else
-					return clog_syntax_error(parser,"&= requires an integer",line);
-			}
-			break;
-
-		case CLOG_TOKEN_ASSIGN:
-		case CLOG_TOKEN_COLON_ASSIGN:
-		default:
-			break;
-		}
-	}
-
-	if (!clog_ast_expression_alloc_builtin3(parser,expr,type,p1,p2,NULL))
+	if (!clog_ast_expression_alloc_builtin2(parser,expr,type,p1,p2))
 		return 0;
 
 	(*expr)->lvalue = 1;
@@ -1223,14 +662,6 @@ int clog_ast_expression_alloc_call(struct clog_parser* parser, struct clog_ast_e
 	{
 		clog_ast_expression_list_free(parser,list);
 		return 0;
-	}
-
-	if (!call->lvalue)
-	{
-		unsigned long line = clog_ast_expression_line(call);
-		clog_ast_expression_free(parser,call);
-		clog_ast_expression_list_free(parser,list);
-		return clog_syntax_error(parser,"Function call requires an lvalue",line);
 	}
 
 	*expr = clog_malloc(sizeof(struct clog_ast_expression));
@@ -1257,6 +688,623 @@ int clog_ast_expression_alloc_call(struct clog_parser* parser, struct clog_ast_e
 	(*expr)->expr.call->expr = call;
 	(*expr)->expr.call->params = list;
 
+	return 1;
+}
+
+static int clog_ast_expression_list_reduce(struct clog_parser* parser, struct clog_ast_expression_list* expr, const struct clog_ast_literal* id, struct clog_ast_literal** value, int* reduced);
+static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct clog_ast_expression** expr, const struct clog_ast_literal* id, struct clog_ast_literal** value, int* reduced);
+
+static int clog_ast_expression_reduce(struct clog_parser* parser, struct clog_ast_expression** expr, const struct clog_ast_literal* id, struct clog_ast_literal** value, int* reduced)
+{
+	if (!*expr)
+		return 1;
+
+	switch ((*expr)->type)
+	{
+	case clog_ast_expression_identifier:
+		if (clog_ast_literal_id_compare(id,(*expr)->expr.identifier) == 0)
+		{
+			clog_ast_literal_free(parser,(*expr)->expr.identifier);
+			(*expr)->expr.identifier = NULL;
+			if (!clog_ast_literal_clone(parser,&(*expr)->expr.literal,*value))
+				return 0;
+
+			(*expr)->type = clog_ast_expression_literal;
+			(*expr)->lvalue = 0;
+			(*expr)->constant = 1;
+			*reduced = 1;
+		}
+		return 1;
+
+	case clog_ast_expression_literal:
+		return 1;
+
+	case clog_ast_expression_builtin:
+		return clog_ast_expression_reduce_builtin(parser,expr,id,value,reduced);
+
+	case clog_ast_expression_call:
+		if (!clog_ast_expression_reduce(parser,&(*expr)->expr.call->expr,id,value,reduced))
+			return 0;
+
+		if (!(*expr)->expr.call->expr->lvalue)
+			return clog_syntax_error(parser,"Function call requires an lvalue",clog_ast_expression_line((*expr)->expr.call->expr));
+
+		return clog_ast_expression_list_reduce(parser,(*expr)->expr.call->params,id,value,reduced);
+	}
+
+	return 0;
+}
+
+static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct clog_ast_expression** expr, const struct clog_ast_literal* id, struct clog_ast_literal** value, int* reduced)
+{
+	struct clog_ast_expression* p1;
+	struct clog_ast_expression* p2;
+	struct clog_ast_expression* p3;
+
+	switch ((*expr)->expr.builtin->type)
+	{
+	case CLOG_TOKEN_ASSIGN:
+	case CLOG_TOKEN_DOUBLE_PLUS:
+	case CLOG_TOKEN_DOUBLE_MINUS:
+	case CLOG_TOKEN_STAR_ASSIGN:
+	case CLOG_TOKEN_SLASH_ASSIGN:
+	case CLOG_TOKEN_PERCENT_ASSIGN:
+	case CLOG_TOKEN_PLUS_ASSIGN:
+	case CLOG_TOKEN_MINUS_ASSIGN:
+	case CLOG_TOKEN_RIGHT_SHIFT_ASSIGN:
+	case CLOG_TOKEN_LEFT_SHIFT_ASSIGN:
+	case CLOG_TOKEN_AMPERSAND_ASSIGN:
+	case CLOG_TOKEN_BITWISE_CARET_ASSIGN:
+	case CLOG_TOKEN_BAR_ASSIGN:
+		if (!(*expr)->expr.builtin->args[0]->lvalue)
+			return clog_syntax_error(parser,"Assignment requires an lvalue",clog_ast_expression_line((*expr)->expr.builtin->args[0]));
+		if (!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[1],id,value,reduced))
+			return 0;
+		if ((*expr)->expr.builtin->args[0]->type != clog_ast_expression_identifier ||
+				clog_ast_literal_id_compare(id,(*expr)->expr.builtin->args[0]->expr.identifier) != 0)
+		{
+			return 1;
+		}
+
+		p1 = (*expr)->expr.builtin->args[0];
+		p2 = (*expr)->expr.builtin->args[1];
+
+		while (p2 && p2->type == clog_ast_expression_builtin && p2->expr.builtin->type == CLOG_TOKEN_ASSIGN)
+			p2 = p2->expr.builtin->args[1];
+
+		if (p2 && p2->type != clog_ast_expression_literal)
+		{
+			clog_ast_literal_free(parser,*value);
+			*value = NULL;
+			return 1;
+		}
+		break;
+
+	default:
+		if (!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[0],id,value,reduced) ||
+				!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[1],id,value,reduced) ||
+				!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[2],id,value,reduced))
+		{
+			return 0;
+		}
+
+		p1 = (*expr)->expr.builtin->args[0];
+		while (p1 && p1->type == clog_ast_expression_builtin && p1->expr.builtin->type == CLOG_TOKEN_ASSIGN)
+			p1 = p1->expr.builtin->args[1];
+		p2 = (*expr)->expr.builtin->args[1];
+		while (p2 && p2->type == clog_ast_expression_builtin && p2->expr.builtin->type == CLOG_TOKEN_ASSIGN)
+			p2 = p2->expr.builtin->args[1];
+		p3 = (*expr)->expr.builtin->args[2];
+		while (p3 && p3->type == clog_ast_expression_builtin && p3->expr.builtin->type == CLOG_TOKEN_ASSIGN)
+			p3 = p3->expr.builtin->args[1];
+		break;
+	}
+
+	switch ((*expr)->expr.builtin->type)
+	{
+	case CLOG_TOKEN_DOT:
+		if (!p1->lvalue)
+			return clog_syntax_error(parser,". requires an lvalue",clog_ast_expression_line(p1));
+		break;
+
+	case CLOG_TOKEN_OPEN_BRACKET:
+		if (!p1->lvalue)
+			return clog_syntax_error(parser,"Subscript requires an lvalue",clog_ast_expression_line(p1));
+		break;
+
+	case CLOG_TOKEN_PLUS:
+		if (p1->type == clog_ast_expression_literal)
+		{
+			if (!p2)
+			{
+				/* Unary + */
+				if (p1->expr.literal->type != clog_ast_literal_integer &&
+					p1->expr.literal->type != clog_ast_literal_real)
+				{
+					return clog_syntax_error(parser,"+ requires a number",clog_ast_expression_line(p1));
+				}
+				goto replace_with_p1;
+			}
+			else if (p2->type == clog_ast_expression_literal)
+			{
+				if (p1->expr.literal->type == clog_ast_literal_string && p2->expr.literal->type == clog_ast_literal_string)
+				{
+					if (!p1->expr.literal->value.string.len)
+						goto replace_with_p2;
+
+					if (p2->expr.literal->value.string.len)
+					{
+						unsigned char* sz = clog_realloc(p1->expr.literal->value.string.str,p1->expr.literal->value.string.len + p2->expr.literal->value.string.len);
+						if (!sz)
+							return clog_out_of_memory(parser);
+
+						memcpy(sz+p1->expr.literal->value.string.len,p2->expr.literal->value.string.str,p2->expr.literal->value.string.len);
+						p1->expr.literal->value.string.str = sz;
+						p1->expr.literal->value.string.len += p2->expr.literal->value.string.len;
+					}
+					goto replace_with_p1;
+				}
+
+				if (p1->expr.literal->type != clog_ast_literal_string && p2->expr.literal->type != clog_ast_literal_string)
+				{
+					if (!clog_ast_literal_arith_convert(p1->expr.literal,p2->expr.literal))
+						return clog_syntax_error(parser,"+ requires  numbers or strings",clog_ast_expression_line(p1));
+
+					if (p1->expr.literal->type == clog_ast_literal_real)
+						p1->expr.literal->value.real += p2->expr.literal->value.real;
+					else
+						p1->expr.literal->value.integer += p2->expr.literal->value.integer;
+
+					goto replace_with_p1;
+				}
+			}
+		}
+		break;
+
+	case CLOG_TOKEN_MINUS:
+		if (p1->type == clog_ast_expression_literal)
+		{
+			if (!p2)
+			{
+				/* Unary - */
+				switch (p1->expr.literal->type)
+				{
+				case clog_ast_literal_integer:
+					p1->expr.literal->value.integer = -p1->expr.literal->value.integer;
+					break;
+
+				case clog_ast_literal_real:
+					p1->expr.literal->value.real = -p1->expr.literal->value.real;
+					break;
+
+				default:
+					return clog_syntax_error(parser,"- requires a number",clog_ast_expression_line(p1));
+				}
+				goto replace_with_p1;
+			}
+			else if (p2->type == clog_ast_expression_literal)
+			{
+				if (!clog_ast_literal_arith_convert(p1->expr.literal,p2->expr.literal))
+					return clog_syntax_error(parser,"- requires numbers",clog_ast_expression_line(p1));
+
+				if (p1->expr.literal->type == clog_ast_literal_real)
+					p1->expr.literal->value.real -= p2->expr.literal->value.real;
+				else
+					p1->expr.literal->value.integer -= p2->expr.literal->value.integer;
+
+				goto replace_with_p1;
+			}
+		}
+		break;
+
+	case CLOG_TOKEN_EXCLAMATION:
+		/* Logical NOT */
+		if (p1->type == clog_ast_expression_literal)
+		{
+			clog_ast_literal_bool_promote(p1->expr.literal);
+			p1->expr.literal->value.integer = (p1->expr.literal->value.integer == 0 ? 1 : 0);
+			goto replace_with_p1;
+		}
+		break;
+
+	case CLOG_TOKEN_TILDA:
+		/* Bitwise 1s complement */
+		if (p1->type == clog_ast_expression_literal)
+		{
+			if (!clog_ast_literal_int_promote(p1->expr.literal))
+				return clog_syntax_error(parser,"~ requires integer",clog_ast_expression_line(p1));
+
+			p1->expr.literal->value.integer = ~p1->expr.literal->value.integer;
+			p1->expr.literal->type = clog_ast_literal_integer;
+			goto replace_with_p1;
+		}
+		break;
+
+	case CLOG_TOKEN_STAR:
+		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
+		{
+			if (!clog_ast_literal_arith_convert(p1->expr.literal,p2->expr.literal))
+				return clog_syntax_error(parser,"* requires numbers",clog_ast_expression_line(p1));
+
+			if (p1->expr.literal->type == clog_ast_literal_real)
+				p1->expr.literal->value.real *= p2->expr.literal->value.real;
+			else
+				p1->expr.literal->value.integer *= p2->expr.literal->value.integer;
+
+			goto replace_with_p1;
+		}
+		break;
+
+	case CLOG_TOKEN_SLASH:
+		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
+		{
+			if (!clog_ast_literal_arith_convert(p1->expr.literal,p2->expr.literal))
+				return clog_syntax_error(parser,"/ requires numbers",clog_ast_expression_line(p1));
+
+			if (p1->expr.literal->type == clog_ast_literal_real)
+			{
+				if (p2->expr.literal->value.real == 0.0)
+					return clog_syntax_error(parser,"Division by 0.0",clog_ast_expression_line(p2));
+
+				p1->expr.literal->value.real /= p2->expr.literal->value.real;
+			}
+			else
+			{
+				if (p2->expr.literal->value.integer == 0)
+					return clog_syntax_error(parser,"Division by 0",clog_ast_expression_line(p2));
+
+				p1->expr.literal->value.integer /= p2->expr.literal->value.integer;
+			}
+			goto replace_with_p1;
+		}
+		break;
+
+	case CLOG_TOKEN_PERCENT:
+		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
+		{
+			if (!clog_ast_literal_int_promote(p1->expr.literal) ||
+					!clog_ast_literal_int_promote(p2->expr.literal))
+			{
+				return clog_syntax_error(parser,"% requires integers",clog_ast_expression_line(p1));
+			}
+
+			p1->expr.literal->value.integer %= p2->expr.literal->value.integer;
+			goto replace_with_p1;
+		}
+		break;
+
+	case CLOG_TOKEN_RIGHT_SHIFT:
+	case CLOG_TOKEN_LEFT_SHIFT:
+		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
+		{
+			if (clog_ast_literal_int_promote(p1->expr.literal) && clog_ast_literal_int_promote(p2->expr.literal))
+			{
+				if ((*expr)->expr.builtin->type == CLOG_TOKEN_RIGHT_SHIFT)
+					p1->expr.literal->value.integer >>= p2->expr.literal->value.integer;
+				else
+					p1->expr.literal->value.integer <<= p2->expr.literal->value.integer;
+
+				goto replace_with_p1;
+			}
+			return clog_syntax_error(parser,(*expr)->expr.builtin->type == CLOG_TOKEN_RIGHT_SHIFT ? ">> requires integers" : "<< requires integers",clog_ast_expression_line(p1));
+		}
+		break;
+
+	case CLOG_TOKEN_LESS_THAN:
+	case CLOG_TOKEN_GREATER_THAN:
+	case CLOG_TOKEN_LESS_THAN_EQUALS:
+	case CLOG_TOKEN_GREATER_THAN_EQUALS:
+	case CLOG_TOKEN_EQUALS:
+	case CLOG_TOKEN_NOT_EQUALS:
+		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
+		{
+			int b = clog_ast_literal_compare(p1->expr.literal,p2->expr.literal);
+			switch ((*expr)->expr.builtin->type)
+			{
+			case CLOG_TOKEN_LESS_THAN:
+				if (b == -2)
+					return clog_syntax_error(parser,"< requires numbers or strings",clog_ast_expression_line(p1));
+				p1->expr.literal->value.integer = (b < 0 ? 1 : 0);
+				break;
+
+			case CLOG_TOKEN_GREATER_THAN:
+				if (b == -2)
+					return clog_syntax_error(parser,"> requires numbers or strings",clog_ast_expression_line(p1));
+				p1->expr.literal->value.integer = (b > 0 ? 1 : 0);
+				break;
+
+			case CLOG_TOKEN_LESS_THAN_EQUALS:
+				if (b == -2)
+					return clog_syntax_error(parser,"<= requires numbers or strings",clog_ast_expression_line(p1));
+				p1->expr.literal->value.integer = (b <= 0 ? 1 : 0);
+				break;
+
+			case CLOG_TOKEN_GREATER_THAN_EQUALS:
+				if (b == -2)
+					return clog_syntax_error(parser,">= requires numbers or strings",clog_ast_expression_line(p1));
+				p1->expr.literal->value.integer = (b >= 0 ? 1 : 0);
+				break;
+
+			case CLOG_TOKEN_EQUALS:
+				if (b == -2)
+					return clog_syntax_error(parser,"== requires numbers or strings",clog_ast_expression_line(p1));
+				p1->expr.literal->value.integer = (b == 0 ? 1 : 0);
+				break;
+
+			case CLOG_TOKEN_NOT_EQUALS:
+				if (b == -2)
+					return clog_syntax_error(parser,"!= requires numbers or strings",clog_ast_expression_line(p1));
+				p1->expr.literal->value.integer = (b != 0 ? 1 : 0);
+				break;
+			}
+
+			p1->expr.literal->type = clog_ast_literal_bool;
+			goto replace_with_p1;
+		}
+		break;
+
+	case CLOG_TOKEN_COMMA:
+		if (p1->constant)
+			goto replace_with_p2;
+		break;
+
+	case CLOG_TOKEN_AND:
+		if (p1->type == clog_ast_expression_literal)
+		{
+			clog_ast_literal_bool_promote(p1->expr.literal);
+			if (p1->expr.literal->value.integer)
+			{
+				if (p2->type == clog_ast_expression_literal)
+					clog_ast_literal_bool_promote(p2->expr.literal);
+
+				goto replace_with_p2;
+			}
+			else
+				goto replace_with_p1;
+		}
+		break;
+
+	case CLOG_TOKEN_OR:
+		if (p1->type == clog_ast_expression_literal)
+		{
+			clog_ast_literal_bool_promote(p1->expr.literal);
+			if (!p1->expr.literal->value.integer)
+			{
+				if (p2->type == clog_ast_expression_literal)
+					clog_ast_literal_bool_promote(p2->expr.literal);
+
+				goto replace_with_p2;
+			}
+			else
+				goto replace_with_p1;
+		}
+		break;
+
+	case CLOG_TOKEN_BAR:
+	case CLOG_TOKEN_CARET:
+	case CLOG_TOKEN_AMPERSAND:
+		if (p1->type == clog_ast_expression_literal && p2->type == clog_ast_expression_literal)
+		{
+			if (clog_ast_literal_int_promote(p1->expr.literal) && clog_ast_literal_int_promote(p2->expr.literal))
+			{
+				if ((*expr)->expr.builtin->type == CLOG_TOKEN_BAR)
+					p1->expr.literal->value.integer |= p2->expr.literal->value.integer;
+				else if ((*expr)->expr.builtin->type == CLOG_TOKEN_CARET)
+					p1->expr.literal->value.integer ^= p2->expr.literal->value.integer;
+				else
+					p1->expr.literal->value.integer &= p2->expr.literal->value.integer;
+
+				goto replace_with_p1;
+			}
+			if ((*expr)->expr.builtin->type == CLOG_TOKEN_BAR)
+				return clog_syntax_error(parser,"| requires integers",clog_ast_expression_line(p1));
+			if ((*expr)->expr.builtin->type == CLOG_TOKEN_CARET)
+				return clog_syntax_error(parser,"^ requires integers",clog_ast_expression_line(p1));
+			return clog_syntax_error(parser,"& requires integers",clog_ast_expression_line(p1));
+		}
+		break;
+
+	case CLOG_TOKEN_QUESTION:
+		if (p1->type == clog_ast_expression_literal)
+		{
+			if (clog_ast_literal_bool_cast(p1->expr.literal))
+				goto replace_with_p2;
+
+			(*expr)->expr.builtin->args[2] = NULL;
+			clog_ast_expression_free(parser,*expr);
+			*expr = p3;
+			*reduced = 1;
+			return 1;
+		}
+		break;
+
+	case CLOG_TOKEN_ASSIGN:
+		clog_ast_literal_free(parser,*value);
+		*value = NULL;
+		if (!clog_ast_literal_clone(parser,value,p2->expr.literal))
+			return 0;
+		return 1;
+
+	case CLOG_TOKEN_DOUBLE_PLUS:
+		if ((*expr)->lvalue)
+		{
+			/* Prefix ++ */
+			if ((*value)->type == clog_ast_literal_real)
+				++(*value)->value.real;
+			else
+			{
+				if (!clog_ast_literal_int_promote(*value))
+					return 0;
+				++(*value)->value.integer;
+			}
+			goto replace_with_assign;
+		}
+
+		/* We can't handle post-fix */
+		clog_ast_literal_free(parser,*value);
+		*value = NULL;
+		return 1;
+
+	case CLOG_TOKEN_DOUBLE_MINUS:
+		if ((*expr)->lvalue)
+		{
+			/* Prefix -- */
+			if ((*value)->type == clog_ast_literal_real)
+				++(*value)->value.real;
+			else
+			{
+				if (!clog_ast_literal_int_promote(*value))
+					return 0;
+				++(*value)->value.integer;
+			}
+			goto replace_with_assign;
+		}
+
+		/* We can't handle post-fix */
+		clog_ast_literal_free(parser,*value);
+		*value = NULL;
+		return 1;
+
+	case CLOG_TOKEN_STAR_ASSIGN:
+		if (!clog_ast_literal_arith_convert(*value,p2->expr.literal))
+			return clog_syntax_error(parser,"*= requires a number",clog_ast_expression_line(p2));
+		if ((*value)->type == clog_ast_literal_real)
+			(*value)->value.real *= p2->expr.literal->value.real;
+		else
+			(*value)->value.integer *= p2->expr.literal->value.integer;
+		goto replace_with_assign;
+
+	case CLOG_TOKEN_SLASH_ASSIGN:
+		if (!clog_ast_literal_arith_convert(*value,p2->expr.literal))
+			return clog_syntax_error(parser,"/= requires a number",clog_ast_expression_line(p1));
+		if ((*value)->type == clog_ast_literal_real)
+		{
+			if (p2->expr.literal->value.real == 0.0)
+				return clog_syntax_error(parser,"Division by 0.0",clog_ast_expression_line(p2));
+
+			(*value)->value.real /= p2->expr.literal->value.real;
+		}
+		else
+		{
+			if (p2->expr.literal->value.integer == 0)
+				return clog_syntax_error(parser,"Division by 0",clog_ast_expression_line(p2));
+
+			(*value)->value.integer /= p2->expr.literal->value.integer;
+		}
+		goto replace_with_assign;
+
+	case CLOG_TOKEN_PERCENT_ASSIGN:
+		if (!clog_ast_literal_int_promote(*value) ||
+				!clog_ast_literal_int_promote(p2->expr.literal))
+		{
+			return clog_syntax_error(parser,"%= require an integer",clog_ast_expression_line(p1));
+		}
+		(*value)->value.integer %= p2->expr.literal->value.integer;
+		goto replace_with_assign;
+
+	case CLOG_TOKEN_PLUS_ASSIGN:
+		if ((*value)->type == clog_ast_literal_string && p2->expr.literal->type == clog_ast_literal_string)
+		{
+			if (!(*value)->value.string.len)
+			{
+				clog_ast_literal_free(parser,*value);
+				*value = NULL;
+				*value = p2->expr.literal;
+				p2->expr.literal = NULL;
+			}
+			else if (p2->expr.literal->value.string.len)
+			{
+				unsigned char* sz = clog_realloc((*value)->value.string.str,(*value)->value.string.len + p2->expr.literal->value.string.len);
+				if (!sz)
+					return clog_out_of_memory(parser);
+
+				memcpy(sz+(*value)->value.string.len,p2->expr.literal->value.string.str,p2->expr.literal->value.string.len);
+				(*value)->value.string.str = sz;
+				(*value)->value.string.len += p2->expr.literal->value.string.len;
+			}
+		}
+		else
+		{
+			if (!clog_ast_literal_arith_convert((*value),p2->expr.literal))
+				return clog_syntax_error(parser,"+= requires a number or string",clog_ast_expression_line(p2));
+
+			if ((*value)->type == clog_ast_literal_real)
+				(*value)->value.real += p2->expr.literal->value.real;
+			else
+				(*value)->value.integer += p2->expr.literal->value.integer;
+		}
+		goto replace_with_assign;
+
+	case CLOG_TOKEN_MINUS_ASSIGN:
+		if (!clog_ast_literal_arith_convert(*value,p2->expr.literal))
+			return clog_syntax_error(parser,"-= require a number",clog_ast_expression_line(p2));
+		if ((*value)->type == clog_ast_literal_real)
+			(*value)->value.real -= p2->expr.literal->value.real;
+		else
+			(*value)->value.integer -= p2->expr.literal->value.integer;
+		goto replace_with_assign;
+
+	case CLOG_TOKEN_RIGHT_SHIFT_ASSIGN:
+	case CLOG_TOKEN_LEFT_SHIFT_ASSIGN:
+		if (!clog_ast_literal_int_promote(*value) || !clog_ast_literal_int_promote(p2->expr.literal))
+			return clog_syntax_error(parser,(*expr)->expr.builtin->type == CLOG_TOKEN_RIGHT_SHIFT_ASSIGN ? ">>= requires an integer" : "<<= requires an integer",clog_ast_expression_line(p2));
+		if ((*expr)->expr.builtin->type == CLOG_TOKEN_RIGHT_SHIFT)
+			(*value)->value.integer >>= p2->expr.literal->value.integer;
+		else
+			(*value)->value.integer <<= p2->expr.literal->value.integer;
+		goto replace_with_assign;
+
+	case CLOG_TOKEN_AMPERSAND_ASSIGN:
+	case CLOG_TOKEN_BITWISE_CARET_ASSIGN:
+	case CLOG_TOKEN_BAR_ASSIGN:
+		if (!clog_ast_literal_int_promote(*value) || !clog_ast_literal_int_promote(p2->expr.literal))
+		{
+			if ((*expr)->expr.builtin->type == CLOG_TOKEN_BAR_ASSIGN)
+				return clog_syntax_error(parser,"|= requires an integer",clog_ast_expression_line(p2));
+			else if ((*expr)->expr.builtin->type == CLOG_TOKEN_BITWISE_CARET_ASSIGN)
+				return clog_syntax_error(parser,"^= requires an integer",clog_ast_expression_line(p2));
+			else
+				return clog_syntax_error(parser,"&= requires an integer",clog_ast_expression_line(p2));
+		}
+		if ((*expr)->expr.builtin->type == CLOG_TOKEN_BAR)
+			(*value)->value.integer |= p2->expr.literal->value.integer;
+		else if ((*expr)->expr.builtin->type == CLOG_TOKEN_CARET)
+			(*value)->value.integer ^= p2->expr.literal->value.integer;
+		else
+			(*value)->value.integer &= p2->expr.literal->value.integer;
+		goto replace_with_assign;
+
+	default:
+		break;
+	}
+
+	return 1;
+
+replace_with_p1:
+	(*expr)->expr.builtin->args[0] = NULL;
+	clog_ast_expression_free(parser,*expr);
+	*expr = p1;
+	*reduced = 1;
+	return 1;
+
+replace_with_p2:
+	(*expr)->expr.builtin->args[1] = NULL;
+	clog_ast_expression_free(parser,*expr);
+	*expr = p2;
+	*reduced = 1;
+	return 1;
+
+replace_with_assign:
+	(*expr)->expr.builtin->type = CLOG_TOKEN_ASSIGN;
+	clog_ast_expression_free(parser,(*expr)->expr.builtin->args[1]);
+	(*expr)->expr.builtin->args[1] = NULL;
+	if (!clog_ast_expression_alloc_literal(parser,&((*expr)->expr.builtin->args[1]),*value) ||
+			!clog_ast_literal_clone(parser,value,*value))
+	{
+		*value = NULL;
+		return 0;
+	}
+	*reduced = 1;
 	return 1;
 }
 
@@ -1341,6 +1389,16 @@ struct clog_ast_expression_list* clog_ast_expression_list_append(struct clog_par
 
 		return list;
 	}
+}
+
+static int clog_ast_expression_list_reduce(struct clog_parser* parser, struct clog_ast_expression_list* list, const struct clog_ast_literal* id, struct clog_ast_literal** value, int* reduced)
+{
+	for (;list;list = list->next)
+	{
+		if (!clog_ast_expression_reduce(parser,&list->expr,id,value,reduced))
+			return 0;
+	}
+	return 1;
 }
 
 static void clog_ast_statement_free(struct clog_parser* parser, struct clog_ast_statement* stmt)
@@ -1482,6 +1540,164 @@ static void clog_ast_statement_list_flatten(struct clog_parser* parser, struct c
 	clog_ast_statement_list_flatten(parser,&(*list)->next);
 }
 
+static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, struct clog_ast_statement_list** block);
+
+static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clog_ast_statement_list** list, const struct clog_ast_literal* id, struct clog_ast_literal** value, int* reduced)
+{
+	int local_reduced;
+
+	if (!*list)
+		return 1;
+
+	/* Reduce each statement */
+	do
+	{
+		struct clog_ast_statement_list* l = *list;
+		struct clog_ast_statement_list** prev = list;
+		int stop = 0;
+
+		local_reduced = 0;
+
+		for (;l && !stop && *value;l = *prev)
+		{
+			switch (l->stmt->type)
+			{
+			case clog_ast_statement_expression:
+				if (!clog_ast_expression_reduce(parser,&l->stmt->stmt.expression,id,value,&local_reduced))
+					return 0;
+
+				if (l->stmt->stmt.expression->constant)
+					goto drop;
+
+				break;
+
+			case clog_ast_statement_return:
+				if (!clog_ast_expression_reduce(parser,&l->stmt->stmt.expression,id,value,&local_reduced))
+					return 0;
+				break;
+
+			case clog_ast_statement_block:
+				if (!clog_ast_statement_list_reduce(parser,&l->stmt->stmt.block,id,value,&local_reduced) ||
+						!clog_ast_statement_list_reduce_block(parser,&l->stmt->stmt.block))
+				{
+					return 0;
+				}
+
+				if (!l->stmt->stmt.block)
+					goto drop;
+
+				break;
+
+			case clog_ast_statement_declaration:
+				/* Declaration is always followed by an assign, reduce the assign */
+				l = l->next;
+				if (!clog_ast_expression_reduce(parser,&l->stmt->stmt.expression->expr.builtin->args[1],id,value,&local_reduced))
+					return 0;
+
+				/* Check if new variable hides the one we are reducing */
+				if (clog_ast_literal_id_compare(id,l->stmt->stmt.expression->expr.builtin->args[0]->expr.identifier) == 0)
+					stop = 1;
+
+				break;
+
+			case clog_ast_statement_if:
+			case clog_ast_statement_do:
+
+			case clog_ast_statement_break:
+			case clog_ast_statement_continue:
+				break;
+			}
+
+			prev = &l->next;
+			continue;
+
+		drop:
+			*prev = l->next;
+			l->next = NULL;
+			clog_ast_statement_list_free(parser,l);
+			*reduced = 1;
+		}
+	}
+	while (local_reduced);
+
+	return 1;
+}
+
+static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, struct clog_ast_statement_list** block)
+{
+	struct clog_ast_statement_list* l;
+	int reduced = 0;
+
+	/* Check for duplicate declarations first */
+	for (l = *block;l;l = l->next)
+	{
+		if (l->stmt->type == clog_ast_statement_declaration)
+		{
+			struct clog_ast_statement_list* l2 = l->next;
+			for (;l2;l2 = l2->next)
+			{
+				if (l2->stmt->type == clog_ast_statement_declaration)
+				{
+					if (clog_ast_literal_id_compare(l->stmt->stmt.declaration,l2->stmt->stmt.declaration) == 0)
+						return clog_syntax_error(parser,"Variable already declared",l2->stmt->stmt.declaration->line);
+				}
+			}
+		}
+	}
+
+	/* Now reduce the block with each declared variable */
+	do
+	{
+		struct clog_ast_statement_list* l = *block;
+
+		reduced = 0;
+
+		/* For each declaration */
+		for (l = *block;l;l = l->next)
+		{
+			if (l->stmt->type == clog_ast_statement_declaration)
+			{
+				/* Declaration is always followed by an assign */
+				const struct clog_ast_literal* id = l->stmt->stmt.declaration;
+				l = l->next;
+
+				if (l->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_literal)
+				{
+					if (!l->next)
+					{
+						/* Nothing else here, no need for the block */
+						clog_ast_statement_list_free(parser,*block);
+						*block = NULL;
+						return 1;
+					}
+
+					struct clog_ast_literal* value = NULL;
+					if (!clog_ast_literal_clone(parser,&value,l->stmt->stmt.expression->expr.builtin->args[1]->expr.literal))
+						return 0;
+
+					if (value)
+					{
+						int local_reduced = 0;
+						if (!clog_ast_statement_list_reduce(parser,&l->next,id,&value,&local_reduced))
+						{
+							clog_ast_literal_free(parser,value);
+							return 0;
+						}
+
+						if (local_reduced)
+							reduced = 1;
+
+						clog_ast_literal_free(parser,value);
+					}
+				}
+			}
+		}
+	}
+	while (reduced);
+
+	return 1;
+}
+
 int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* block)
 {
 	*list = NULL;
@@ -1499,20 +1715,23 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 	/* Check for blocks in block */
 	clog_ast_statement_list_flatten(parser,&block);
 
-	/* Check for blocks containing nothing but constant expressions */
-	if (clog_ast_statement_list_is_const(block))
-	{
-		clog_ast_statement_list_free(parser,block);
-		return 1;
-	}
-
-	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_block))
+	/* Now reduce the block */
+	if (!clog_ast_statement_list_reduce_block(parser,&block))
 	{
 		clog_ast_statement_list_free(parser,block);
 		return 0;
 	}
 
-	(*list)->stmt->stmt.block = block;
+	if (block)
+	{
+		if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_block))
+		{
+			clog_ast_statement_list_free(parser,block);
+			return 0;
+		}
+
+		(*list)->stmt->stmt.block = block;
+	}
 
 	return 1;
 }
@@ -1536,6 +1755,8 @@ struct clog_ast_statement_list* clog_ast_statement_list_append(struct clog_parse
 int clog_ast_statement_list_alloc_declaration(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_token* id, struct clog_ast_expression* init)
 {
 	struct clog_token* id2 = NULL;
+	struct clog_ast_expression* id_expr;
+	struct clog_ast_expression* assign_expr;
 
 	*list = NULL;
 
@@ -1583,9 +1804,6 @@ int clog_ast_statement_list_alloc_declaration(struct clog_parser* parser, struct
 	}
 
 	/* Transform var x = 3; => var x; x = 3; */
-	struct clog_ast_expression* id_expr;
-	struct clog_ast_expression* assign_expr;
-
 	if (!clog_ast_expression_alloc_id(parser,&id_expr,id2))
 	{
 		clog_ast_expression_free(parser,init);
@@ -1634,7 +1852,7 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 			struct clog_ast_statement_list* l = true_stmt->stmt->stmt.block;
 			for (;l;l = l->next)
 			{
-				if (l->stmt->type == clog_ast_statement_declaration && clog_ast_literal_compare(l->stmt->stmt.declaration,cond->stmt->stmt.declaration) == 0)
+				if (l->stmt->type == clog_ast_statement_declaration && clog_ast_literal_id_compare(l->stmt->stmt.declaration,cond->stmt->stmt.declaration) == 0)
 				{
 					unsigned long line = l->stmt->stmt.declaration->line;
 					clog_ast_statement_list_free(parser,cond);
@@ -1649,7 +1867,7 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 			struct clog_ast_statement_list* l = false_stmt->stmt->stmt.block;
 			for (;l;l = l->next)
 			{
-				if (l->stmt->type == clog_ast_statement_declaration && clog_ast_literal_compare(l->stmt->stmt.declaration,cond->stmt->stmt.declaration) == 0)
+				if (l->stmt->type == clog_ast_statement_declaration && clog_ast_literal_id_compare(l->stmt->stmt.declaration,cond->stmt->stmt.declaration) == 0)
 				{
 					unsigned long line = l->stmt->stmt.declaration->line;
 					clog_ast_statement_list_free(parser,cond);
