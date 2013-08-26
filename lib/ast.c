@@ -857,6 +857,8 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	if (!*value)
 		return 1;
 
+	/* Rewrite x = (A,B); => A,x=B; */
+
 	if ((*expr)->expr.builtin->type == CLOG_TOKEN_ASSIGN &&
 			(*expr)->expr.builtin->args[1]->type == clog_ast_expression_builtin &&
 			(*expr)->expr.builtin->args[1]->expr.builtin->type == CLOG_TOKEN_COMMA)
@@ -884,10 +886,12 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 
 		if (!(*expr)->lvalue)
 		{
-			/* We can't handle post-fix */
-			clog_ast_literal_free(parser,*value);
-			*value = NULL;
-			return 1;
+			/* Rewrite postfix e++ => (++e,value) */
+			if (!clog_ast_literal_clone(parser,&p1,*value) || !clog_ast_expression_alloc_literal(parser,&e,p1))
+				return 0;
+			(*expr)->lvalue = 1;
+			*reduced = 1;
+			return clog_ast_expression_alloc_builtin2(parser,expr,CLOG_TOKEN_COMMA,*expr,e);
 		}
 		break;
 
