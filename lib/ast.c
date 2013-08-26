@@ -1810,14 +1810,38 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 
 		case clog_ast_statement_declaration:
 			/* Declaration is always followed by an assign, reduce the assign */
-			l = l->next;
-			if (!clog_ast_expression_reduce(parser,&l->stmt->stmt.expression->expr.builtin->args[1],id,value,reduced))
+			if (!clog_ast_expression_reduce(parser,&l->next->stmt->stmt.expression->expr.builtin->args[1],id,value,reduced))
 				return 0;
 
+			if (l->next->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_builtin &&
+					l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->type == CLOG_TOKEN_COMMA)
+			{
+				/* Rewrite comma expressions as statements */
+				struct clog_ast_expression* e0 = l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[0];
+				struct clog_ast_expression* e1 = l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[1];
+				struct clog_ast_statement_list* p = *prev;
+
+				l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[0] = NULL;
+				l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[1] = NULL;
+				clog_ast_expression_free(parser,l->next->stmt->stmt.expression->expr.builtin->args[1]);
+				l->next->stmt->stmt.expression->expr.builtin->args[1] = e1;
+
+				if (!clog_ast_statement_list_alloc_expression(parser,prev,e0,1))
+				{
+					*prev = p;
+					return 0;
+				}
+				if (!*prev)
+					*prev = p;
+				else
+					(*prev)->next = p;
+			}
+
 			/* Check if new variable hides the one we are reducing */
-			if (clog_ast_literal_id_compare(id,l->stmt->stmt.expression->expr.builtin->args[0]->expr.identifier) == 0)
+			if (clog_ast_literal_id_compare(id,l->next->stmt->stmt.expression->expr.builtin->args[0]->expr.identifier) == 0)
 				return 1;
 
+			l = l->next;
 			break;
 
 		case clog_ast_statement_if:
