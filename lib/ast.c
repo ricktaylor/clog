@@ -1722,22 +1722,6 @@ void clog_ast_statement_list_free(struct clog_parser* parser, struct clog_ast_st
 	}
 }
 
-static int clog_ast_statement_list_is_const(const struct clog_ast_statement_list* list)
-{
-	for (;list;list = list->next)
-	{
-		if (list->stmt->type == clog_ast_statement_expression)
-		{
-			if (!list->stmt->stmt.expression->constant)
-				break;
-		}
-		else if (list->stmt->type != clog_ast_statement_declaration)
-			break;
-	}
-
-	return (!list);
-}
-
 int clog_ast_statement_list_alloc(struct clog_parser* parser, struct clog_ast_statement_list** list, enum clog_ast_statement_type type)
 {
 	*list = clog_malloc(sizeof(struct clog_ast_statement_list));
@@ -1805,6 +1789,7 @@ static void clog_ast_statement_list_flatten(struct clog_parser* parser, struct c
 
 static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, struct clog_ast_statement_list** block);
 static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct clog_ast_statement_list** if_stmt, struct clog_ast_reduction* reduction);
+static int clog_ast_statement_list_reduce_do(struct clog_parser* parser, struct clog_ast_statement_list** if_stmt, struct clog_ast_reduction* reduction);
 
 static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_reduction* reduction)
 {
@@ -1966,10 +1951,9 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 			break;
 
 		case clog_ast_statement_do:
-			/* Stop all further reduction! */
-			clog_ast_literal_free(parser,reduction->value);
-			reduction->value = NULL;
-			return 1;
+			if (!clog_ast_statement_list_reduce_do(parser,prev,reduction))
+				return 0;
+			break;
 
 		case clog_ast_statement_break:
 		case clog_ast_statement_continue:
@@ -2108,30 +2092,17 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 		return 0;
 	}
 
-	/* If we have no result statements, see if the comparison is constant */
+	/* If we have no result statements replace with condition */
 	if (!(*if_stmt)->stmt->stmt.if_stmt->true_stmt && !(*if_stmt)->stmt->stmt.if_stmt->false_stmt)
 	{
-		if ((*if_stmt)->stmt->stmt.if_stmt->condition->constant)
-		{
-			/* We can eliminate this if */
-			struct clog_ast_statement_list* n = (*if_stmt)->next;
-			(*if_stmt)->next = NULL;
-			clog_ast_statement_list_free(parser,*if_stmt);
-			*if_stmt = n;
-		}
-		else
-		{
-			/* Otherwise replace with a statement */
-			struct clog_ast_expression* e = (*if_stmt)->stmt->stmt.if_stmt->condition;
-			struct clog_ast_statement_list* n = (*if_stmt)->next;
-			(*if_stmt)->next = NULL;
-			(*if_stmt)->stmt->stmt.if_stmt->condition = NULL;
-			clog_ast_statement_list_free(parser,*if_stmt);
-			if (!clog_ast_statement_list_alloc_expression(parser,if_stmt,e))
-				return 0;
-			(*if_stmt)->next = n;
-		}
-
+		struct clog_ast_expression* e = (*if_stmt)->stmt->stmt.if_stmt->condition;
+		struct clog_ast_statement_list* n = (*if_stmt)->next;
+		(*if_stmt)->next = NULL;
+		(*if_stmt)->stmt->stmt.if_stmt->condition = NULL;
+		clog_ast_statement_list_free(parser,*if_stmt);
+		if (!clog_ast_statement_list_alloc_expression(parser,if_stmt,e))
+			return 0;
+		(*if_stmt)->next = n;
 		reduction->reduced = 1;
 		return 1;
 	}
@@ -2146,6 +2117,39 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 		(*if_stmt)->stmt->stmt.if_stmt->false_stmt = NULL;
 
 		reduction->reduced = 1;
+	}
+
+	return 1;
+}
+
+static int clog_ast_statement_list_reduce_do(struct clog_parser* parser, struct clog_ast_statement_list** do_stmt, struct clog_ast_reduction* reduction)
+{
+	struct clog_ast_literal* if_lit;
+
+	/* Clear value and reduce loop statement */
+	clog_ast_literal_free(parser,reduction->value);
+	reduction->value = NULL;
+
+	if (!clog_ast_statement_list_reduce(parser,&(*do_stmt)->stmt->stmt.do_stmt->loop_stmt,reduction))
+		return 0;
+
+	/* Check for constant false condition */
+	if (!clog_ast_expression_eval(parser,&if_lit,(*do_stmt)->stmt->stmt.do_stmt->condition,NULL,NULL))
+		return 0;
+	if (if_lit)
+	{
+		if (!clog_ast_literal_bool_cast(if_lit))
+		{
+			/* Replace with loop */
+			struct clog_ast_statement_list* l2 = (*do_stmt)->stmt->stmt.do_stmt->loop_stmt;
+			(*do_stmt)->stmt->stmt.do_stmt->loop_stmt = NULL;
+			*do_stmt = clog_ast_statement_list_append(parser,l2,(*do_stmt)->next);
+			reduction->reduced = 1;
+			clog_ast_literal_free(parser,if_lit);
+			return 1;
+		}
+
+		clog_ast_literal_free(parser,if_lit);
 	}
 
 	return 1;
@@ -2436,35 +2440,6 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 		{
 			/* Flatten the statement */
 			clog_ast_statement_list_flatten(parser,&loop_stmt);
-		}
-
-		/* Eliminate constant expressions in the loop */
-		if (clog_ast_statement_list_is_const(loop_stmt))
-		{
-			clog_ast_statement_list_free(parser,loop_stmt);
-			loop_stmt = NULL;
-		}
-	}
-
-	/* If we have no loop statements, see if the comparison is constant */
-	if (!loop_stmt)
-	{
-		/* Replace with a statement */
-		return clog_ast_statement_list_alloc_expression(parser,list,cond);
-	}
-
-	/* Check for literal condition */
-	if (cond->type == clog_ast_expression_literal)
-	{
-		/* Force to boolean */
-		clog_ast_literal_bool_promote(cond->expr.literal);
-
-		/* And discard if false */
-		if (!cond->expr.literal->value.integer)
-		{
-			clog_ast_expression_free(parser,cond);
-			clog_ast_statement_list_free(parser,loop_stmt);
-			return 1;
 		}
 	}
 
