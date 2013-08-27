@@ -2059,9 +2059,9 @@ static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, stru
 		struct clog_ast_reduction reduction = {0};
 		struct clog_ast_statement_list* l = *block;
 
+		/* Reduce with no variables first */
 		if (!clog_ast_statement_list_reduce(parser,block,&reduction))
 			return 0;
-
 		if (reduction.reduced)
 			continue;
 
@@ -2078,14 +2078,6 @@ static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, stru
 
 				if (l->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_literal)
 				{
-					if (!l->next)
-					{
-						/* Nothing else here, no need for the block */
-						clog_ast_statement_list_free(parser,*block);
-						*block = NULL;
-						return 1;
-					}
-
 					if (!clog_ast_literal_clone(parser,&reduction.value,l->stmt->stmt.expression->expr.builtin->args[1]->expr.literal))
 						return 0;
 
