@@ -26,7 +26,7 @@
 %default_type       { struct clog_ast_statement_list* }
 %default_destructor { clog_ast_statement_list_free(parser,$$); }
 
-program ::= statement_list(A). { parser->pgm = A; }
+program ::= statement_list(A). { clog_ast_statement_list_alloc_block(parser,&parser->pgm,A); }
 program ::= .                  { parser->pgm = NULL; }
 
 statement_list(A) ::= statement(B).                   { A = B; }
@@ -60,10 +60,10 @@ dangling_if(A) ::= FOR OPEN_PAREN for_init_statement(B) SEMI_COLON expression(D)
 for_init_statement(A) ::= expression_statement(B). { A = B; }
 for_init_statement(A) ::= variable_declaration(B). { A = B; }
 
-condition(A) ::= expression(B).       { clog_ast_statement_list_alloc_expression(parser,&A,B,0); }
+condition(A) ::= expression(B).       { clog_ast_statement_list_alloc_expression(parser,&A,B); }
 condition(A) ::= VAR ID(B) ASSIGN initializer(C). { clog_ast_statement_list_alloc_declaration(parser,&A,B,C); }
 
-expression_statement(A) ::= expression(B) SEMI_COLON. { clog_ast_statement_list_alloc_expression(parser,&A,B,1); }
+expression_statement(A) ::= expression(B) SEMI_COLON. { clog_ast_statement_list_alloc_expression(parser,&A,B); }
 expression_statement(A) ::= SEMI_COLON.               { A = NULL; }
 
 compound_statement(A) ::= OPEN_BRACE CLOSE_BRACE.                   { A = NULL; }
