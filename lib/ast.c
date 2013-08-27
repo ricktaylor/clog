@@ -544,7 +544,6 @@ int clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_ex
 		return 0;
 
 	(*expr)->lvalue = 1;
-	(*expr)->constant = 0;
 
 	return 1;
 }
@@ -594,9 +593,6 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 	if (!clog_ast_expression_alloc_builtin3(parser,expr,type,p1,p2,NULL))
 		return 0;
 
-	if (type == CLOG_TOKEN_COMMA)
-		(*expr)->lvalue = (*expr)->expr.builtin->args[1]->lvalue;
-
 	return 1;
 }
 
@@ -643,9 +639,28 @@ int clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_a
 	(*expr)->expr.builtin->args[1] = p2;
 	(*expr)->expr.builtin->args[2] = p3;
 
-	(*expr)->constant = (p1->constant && p1->type != clog_ast_expression_identifier &&
-			(p2 ? p2->constant && p2->type != clog_ast_expression_identifier : 1) &&
-			(p3 ? p3->constant && p3->type != clog_ast_expression_identifier : 1) ? 1 : 0);
+	if (type == CLOG_TOKEN_COMMA)
+	{
+		if (p2 && p2->type == clog_ast_expression_identifier)
+			p2->constant = 0;
+
+		(*expr)->lvalue = p2->lvalue;
+	}
+	else
+	{
+		if (p1 && p1->type == clog_ast_expression_identifier)
+			p1->constant = 0;
+
+		if (p2 && p2->type == clog_ast_expression_identifier)
+			p2->constant = 0;
+
+		if (p3 && p3->type == clog_ast_expression_identifier)
+			p3->constant = 0;
+	}
+
+	(*expr)->constant = (p1->constant &&
+			(p2 ? p2->constant : 1) &&
+			(p3 ? p3->constant : 1) ? 1 : 0);
 
 	return 1;
 }
