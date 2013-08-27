@@ -1963,11 +1963,17 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 		case clog_ast_statement_if:
 			if (!clog_ast_statement_list_reduce_if(parser,prev,reduction))
 				return 0;
+
+			if (*prev != l)
+				l = *prev;
 			break;
 
 		case clog_ast_statement_do:
 			if (!clog_ast_statement_list_reduce_do(parser,prev,reduction))
 				return 0;
+
+			if (*prev != l)
+				l = *prev;
 			break;
 
 		case clog_ast_statement_break:
@@ -2078,6 +2084,7 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 		return 0;
 	if (if_lit)
 	{
+		struct clog_ast_statement_list* l1;
 		struct clog_ast_statement_list* l2;
 		if (clog_ast_literal_bool_cast(if_lit))
 		{
@@ -2090,7 +2097,11 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 			(*if_stmt)->stmt->stmt.if_stmt->false_stmt = NULL;
 		}
 
+		l1 = (*if_stmt);
 		*if_stmt = clog_ast_statement_list_append(parser,l2,(*if_stmt)->next);
+
+		l1->next = NULL;
+		clog_ast_statement_list_free(parser,l1);
 		reduction->reduced = 1;
 
 		clog_ast_literal_free(parser,if_lit);
@@ -2156,11 +2167,16 @@ static int clog_ast_statement_list_reduce_do(struct clog_parser* parser, struct 
 		if (!clog_ast_literal_bool_cast(if_lit))
 		{
 			/* Replace with loop */
+			struct clog_ast_statement_list* l1;
 			struct clog_ast_statement_list* l2 = (*do_stmt)->stmt->stmt.do_stmt->loop_stmt;
-			(*do_stmt)->stmt->stmt.do_stmt->loop_stmt = NULL;
+
+			l1 = (*do_stmt);
 			*do_stmt = clog_ast_statement_list_append(parser,l2,(*do_stmt)->next);
+			l1->next = NULL;
+			clog_ast_statement_list_free(parser,l1);
 			reduction->reduced = 1;
 			clog_ast_literal_free(parser,if_lit);
+
 			return 1;
 		}
 
