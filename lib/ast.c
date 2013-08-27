@@ -1845,7 +1845,39 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 			break;
 
 		case clog_ast_statement_if:
+			{
+				struct clog_ast_literal* if_lit;
+
+				if (!clog_ast_expression_reduce(parser,&l->stmt->stmt.if_stmt->condition,id,value,reduced))
+					return 0;
+
+				/* Check for literal condition */
+				if ((if_lit = clog_ast_expression_eval(parser,l->stmt->stmt.if_stmt->condition,id,*value)))
+				{
+					struct clog_ast_statement_list* l2;
+					if (clog_ast_literal_bool_cast(if_lit))
+					{
+						l2 = l->stmt->stmt.if_stmt->true_stmt;
+						l->stmt->stmt.if_stmt->true_stmt = NULL;
+					}
+					else
+					{
+						l2 = l->stmt->stmt.if_stmt->false_stmt;
+						l->stmt->stmt.if_stmt->false_stmt = NULL;
+					}
+
+					*prev = clog_ast_statement_list_append(parser,l2,l->next);
+					*reduced = 1;
+
+					clog_ast_literal_free(parser,if_lit);
+				}
+			}
+			/* Stop all further reduction! */
+			return 1;
+
 		case clog_ast_statement_do:
+			/* Stop all further reduction! */
+			return 1;
 
 		case clog_ast_statement_break:
 		case clog_ast_statement_continue:
@@ -2088,6 +2120,9 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 	/* Check to see if we have an expression of the kind: if (var x = 12) */
 	if (cond->stmt->type == clog_ast_statement_declaration)
 	{
+		struct clog_ast_expression* cond_expr;
+		struct clog_ast_statement_list* cond2;
+
 		/* We must check to see if an identical declaration occurs in the outermost block of true_stmt and false_stmt */
 		if (true_stmt && true_stmt->stmt->type == clog_ast_statement_block)
 		{
@@ -2121,7 +2156,9 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		}
 
 		/* Now rewrite if (var x = 1) ... => { var x; if (x = 1) ... } */
-		if (!clog_ast_statement_list_alloc_if(parser,&cond->next,cond->next,true_stmt,false_stmt))
+		if (!clog_ast_expression_clone(parser,&cond_expr,cond->next->stmt->stmt.expression) ||
+				!clog_ast_statement_list_alloc_expression(parser,&cond2,cond_expr,0) ||
+				!clog_ast_statement_list_alloc_if(parser,&cond->next->next,cond2,true_stmt,false_stmt))
 		{
 			clog_ast_statement_list_free(parser,cond);
 			return 0;
@@ -2210,24 +2247,6 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 			/* Otherwise replace with a statement */
 			*list = cond;
 		}
-		return 1;
-	}
-
-	/* Check for literal condition */
-	if (cond->stmt->stmt.expression->type == clog_ast_expression_literal)
-	{
-		if (clog_ast_literal_bool_cast(cond->stmt->stmt.expression->expr.literal))
-		{
-			*list = true_stmt;
-			clog_ast_statement_list_free(parser,false_stmt);
-		}
-		else
-		{
-			*list = false_stmt;
-			clog_ast_statement_list_free(parser,true_stmt);
-		}
-
-		clog_ast_statement_list_free(parser,cond);
 		return 1;
 	}
 
@@ -2567,6 +2586,14 @@ static void clog_ast_dump_expr(const struct clog_ast_expression* expr)
 			clog_ast_dump_expr_b(expr->expr.builtin->args[0]);
 			break;
 
+		case CLOG_TOKEN_DOUBLE_PLUS:
+			if (expr->lvalue)
+				printf("++");
+			clog_ast_dump_expr_b(expr->expr.builtin->args[0]);
+			if (!expr->lvalue)
+				printf("++");
+			break;
+
 		case CLOG_TOKEN_QUESTION:
 			printf(" ? ");
 			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
@@ -2668,12 +2695,7 @@ static void clog_ast_dump(size_t indent, const struct clog_ast_statement_list* l
 		case clog_ast_statement_do:
 			printf("do\n");
 			if (list->stmt->stmt.do_stmt->loop_stmt)
-			{
-				if (list->stmt->stmt.do_stmt->loop_stmt->stmt->type == clog_ast_statement_block)
-					clog_ast_dump(indent,list->stmt->stmt.do_stmt->loop_stmt);
-				else
-					clog_ast_dump(indent+1,list->stmt->stmt.do_stmt->loop_stmt);
-			}
+				clog_ast_dump(indent+1,list->stmt->stmt.do_stmt->loop_stmt);
 			else
 			{
 				clog_ast_indent(indent+1);
