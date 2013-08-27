@@ -2108,19 +2108,6 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 		return 0;
 	}
 
-	/* If we have no true_stmt, negate the condition and swap */
-	if (!(*if_stmt)->stmt->stmt.if_stmt->true_stmt)
-	{
-		if (!clog_ast_expression_alloc_builtin1(parser,&(*if_stmt)->stmt->stmt.if_stmt->condition,CLOG_TOKEN_EXCLAMATION,(*if_stmt)->stmt->stmt.if_stmt->condition))
-			return 0;
-
-		(*if_stmt)->stmt->stmt.if_stmt->true_stmt = (*if_stmt)->stmt->stmt.if_stmt->false_stmt;
-		(*if_stmt)->stmt->stmt.if_stmt->false_stmt = NULL;
-
-		reduction->reduced = 1;
-		return 1;
-	}
-
 	/* If we have no result statements, see if the comparison is constant */
 	if (!(*if_stmt)->stmt->stmt.if_stmt->true_stmt && !(*if_stmt)->stmt->stmt.if_stmt->false_stmt)
 	{
@@ -2144,6 +2131,19 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 				return 0;
 			(*if_stmt)->next = n;
 		}
+
+		reduction->reduced = 1;
+		return 1;
+	}
+
+	/* If we have no true_stmt, negate the condition and swap */
+	if (!(*if_stmt)->stmt->stmt.if_stmt->true_stmt)
+	{
+		if (!clog_ast_expression_alloc_builtin1(parser,&(*if_stmt)->stmt->stmt.if_stmt->condition,CLOG_TOKEN_EXCLAMATION,(*if_stmt)->stmt->stmt.if_stmt->condition))
+			return 0;
+
+		(*if_stmt)->stmt->stmt.if_stmt->true_stmt = (*if_stmt)->stmt->stmt.if_stmt->false_stmt;
+		(*if_stmt)->stmt->stmt.if_stmt->false_stmt = NULL;
 
 		reduction->reduced = 1;
 	}
@@ -2360,13 +2360,6 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 			/* Flatten the statement */
 			clog_ast_statement_list_flatten(parser,&true_stmt);
 		}
-
-		/* Eliminate constant expressions in the clause */
-		if (clog_ast_statement_list_is_const(true_stmt))
-		{
-			clog_ast_statement_list_free(parser,true_stmt);
-			true_stmt = NULL;
-		}
 	}
 
 	if (false_stmt)
@@ -2385,13 +2378,6 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		{
 			/* Flatten the statement */
 			clog_ast_statement_list_flatten(parser,&false_stmt);
-		}
-
-		/* Eliminate constant expressions in the clause */
-		if (clog_ast_statement_list_is_const(false_stmt))
-		{
-			clog_ast_statement_list_free(parser,false_stmt);
-			false_stmt = NULL;
 		}
 	}
 
