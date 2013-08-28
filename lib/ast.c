@@ -2378,41 +2378,23 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		return clog_ast_statement_list_alloc_block(parser,list,cond);
 	}
 
-	if (true_stmt)
+	/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
+	if (true_stmt && true_stmt->stmt->type == clog_ast_statement_declaration)
 	{
-		/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
-		if (true_stmt->stmt->type == clog_ast_statement_declaration)
+		if (!clog_ast_statement_list_alloc_block(parser,&true_stmt,true_stmt))
 		{
-			if (!clog_ast_statement_list_alloc_block(parser,&true_stmt,true_stmt))
-			{
-				clog_ast_statement_list_free(parser,cond);
-				clog_ast_statement_list_free(parser,false_stmt);
-				return 0;
-			}
-		}
-		else
-		{
-			/* Flatten the statement */
-			clog_ast_statement_list_flatten(parser,&true_stmt);
+			clog_ast_statement_list_free(parser,cond);
+			clog_ast_statement_list_free(parser,false_stmt);
+			return 0;
 		}
 	}
-
-	if (false_stmt)
+	if (false_stmt && false_stmt->stmt->type == clog_ast_statement_declaration)
 	{
-		/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
-		if (false_stmt->stmt->type == clog_ast_statement_declaration)
+		if (!clog_ast_statement_list_alloc_block(parser,&false_stmt,false_stmt))
 		{
-			if (!clog_ast_statement_list_alloc_block(parser,&false_stmt,false_stmt))
-			{
-				clog_ast_statement_list_free(parser,cond);
-				clog_ast_statement_list_free(parser,true_stmt);
-				return 0;
-			}
-		}
-		else
-		{
-			/* Flatten the statement */
-			clog_ast_statement_list_flatten(parser,&false_stmt);
+			clog_ast_statement_list_free(parser,cond);
+			clog_ast_statement_list_free(parser,true_stmt);
+			return 0;
 		}
 	}
 
@@ -2456,21 +2438,13 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 		return 0;
 	}
 
-	if (loop_stmt)
+	/* Rewrite to force compound statements: do var i while(1)  =>  do { var i; } while(1) */
+	if (loop_stmt && loop_stmt->stmt->type == clog_ast_statement_declaration)
 	{
-		/* Rewrite to force compound statements: do var i while(1)  =>  do { var i; } while(1) */
-		if (loop_stmt->stmt->type == clog_ast_statement_declaration)
+		if (!clog_ast_statement_list_alloc_block(parser,&loop_stmt,loop_stmt))
 		{
-			if (!clog_ast_statement_list_alloc_block(parser,&loop_stmt,loop_stmt))
-			{
-				clog_ast_expression_free(parser,cond);
-				return 0;
-			}
-		}
-		else
-		{
-			/* Flatten the statement */
-			clog_ast_statement_list_flatten(parser,&loop_stmt);
+			clog_ast_expression_free(parser,cond);
+			return 0;
 		}
 	}
 
