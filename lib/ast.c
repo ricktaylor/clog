@@ -1041,11 +1041,8 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 
 	default:
 		if (!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[0],reduction) ||
-				!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[1],reduction))
-		{
-			return 0;
-		}
-		if (!clog_ast_expression_eval(parser,&p1,(*expr)->expr.builtin->args[0],reduction->id,reduction->value) ||
+				!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[1],reduction) ||
+				!clog_ast_expression_eval(parser,&p1,(*expr)->expr.builtin->args[0],reduction->id,reduction->value) ||
 				!clog_ast_expression_eval(parser,&p2,(*expr)->expr.builtin->args[1],reduction->id,reduction->value))
 		{
 			return 0;
@@ -1167,6 +1164,65 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			clog_ast_literal_bool_promote(p1);
 			p1->value.integer = (p1->value.integer == 0 ? 1 : 0);
 			goto replace_with_p1;
+		}
+		if ((*expr)->expr.builtin->args[0]->type == clog_ast_expression_builtin)
+		{
+			struct clog_ast_expression* e = NULL;
+
+			/* Negate any equality operator */
+			switch ((*expr)->expr.builtin->args[0]->expr.builtin->type)
+			{
+			case CLOG_TOKEN_EXCLAMATION:
+				e = (*expr)->expr.builtin->args[0]->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0]->expr.builtin->args[0] = NULL;
+				break;
+
+			case CLOG_TOKEN_LESS_THAN:
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = NULL;
+				e->expr.builtin->type = CLOG_TOKEN_GREATER_THAN_EQUALS;
+				break;
+
+			case CLOG_TOKEN_GREATER_THAN:
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = NULL;
+				e->expr.builtin->type = CLOG_TOKEN_LESS_THAN_EQUALS;
+				break;
+
+			case CLOG_TOKEN_LESS_THAN_EQUALS:
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = NULL;
+				e->expr.builtin->type = CLOG_TOKEN_GREATER_THAN;
+				break;
+
+			case CLOG_TOKEN_GREATER_THAN_EQUALS:
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = NULL;
+				e->expr.builtin->type = CLOG_TOKEN_LESS_THAN;
+				break;
+
+			case CLOG_TOKEN_EQUALS:
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = NULL;
+				e->expr.builtin->type = CLOG_TOKEN_NOT_EQUALS;
+				break;
+
+			case CLOG_TOKEN_NOT_EQUALS:
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = NULL;
+				e->expr.builtin->type = CLOG_TOKEN_EQUALS;
+				break;
+
+			default:
+				break;
+			}
+
+			if (e)
+			{
+				clog_ast_expression_free(parser,*expr);
+				*expr = e;
+				reduction->reduced = 1;
+			}
 		}
 		break;
 
@@ -1321,7 +1377,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			if (!clog_ast_expression_reduce_builtin_replace(parser,expr,e))
 				goto failed;
 			reduction->reduced = 1;
-			goto success;
 		}
 		break;
 
@@ -1337,7 +1392,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			if (!clog_ast_expression_reduce_builtin_replace(parser,expr,e))
 				goto failed;
 			reduction->reduced = 1;
-			goto success;
 		}
 		break;
 
@@ -1383,7 +1437,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			if (!clog_ast_expression_reduce_builtin_replace(parser,expr,e))
 				goto failed;
 			reduction->reduced = 1;
-			goto success;
 		}
 		break;
 
@@ -1391,7 +1444,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		clog_ast_literal_free(parser,reduction->value);
 		if (!clog_ast_literal_clone(parser,&reduction->value,p2))
 			goto failed;
-		goto success;
+		break;
 
 	case CLOG_TOKEN_DOUBLE_PLUS:
 		/* Prefix ++ */
