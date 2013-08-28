@@ -292,7 +292,7 @@ static int push_string(struct clog_parser* parser, void* lemon, const unsigned c
 	
 	clog_parser(lemon,CLOG_TOKEN_STRING,tok,parser);
 	
-	return !parser->failed;
+	return 1;
 }
 
 static int push_token_text(struct clog_parser* parser, void* lemon, unsigned int type, const unsigned char* sz, size_t len)
@@ -303,7 +303,7 @@ static int push_token_text(struct clog_parser* parser, void* lemon, unsigned int
 	
 	clog_parser(lemon,type,tok,parser);
 	
-	return !parser->failed;
+	return 1;
 }
 
 static int push_int(struct clog_parser* parser, void* lemon, long v)
@@ -317,7 +317,7 @@ static int push_int(struct clog_parser* parser, void* lemon, long v)
 	
 	clog_parser(lemon,CLOG_TOKEN_INTEGER,tok,parser);
 	
-	return !parser->failed;
+	return 1;
 }
 
 static int push_integer(struct clog_parser* parser, void* lemon, const unsigned char* sz, size_t len, unsigned int base)
@@ -444,7 +444,7 @@ static int push_float(struct clog_parser* parser, void* lemon, const unsigned ch
 	
 	clog_parser(lemon,CLOG_TOKEN_FLOAT,tok,parser);
 	
-	return !parser->failed;
+	return 1;
 }
 
 int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser* parser, void* lemon)
@@ -457,7 +457,7 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 	unsigned char* ts;
 	unsigned char* te;
 	size_t buffer_size = 1024;
-	int err = 0;
+	int ret = 0;
 		
 	%% write init;
 		
@@ -466,20 +466,20 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 		clog_out_of_memory(parser);
 	else
 	{
-		for (p = buffer;!err && !eof && !parser->failed;)
+		for (p = buffer;;)
 		{
 			const unsigned char* pe;
 			ptrdiff_t space = buffer_size - (p - buffer);
 			size_t read = space;
 					
-			if ((err = (*rd_fn)(rd_param,p,&read)) != 0)
+			if (!(*rd_fn)(rd_param,p,&read))
 				break;
 			
 			pe = p + read;
 			if (read < space)
 				eof = pe;
 			
-			while (p != pe && !err && !parser->failed)
+			while (p != pe)
 			{
 				%% write exec;
 				
@@ -488,16 +488,16 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 			}
 			
 			if (cs >= %%{ write first_final; }%%)
+			{
+				ret = 1;
 				break;
+			}
 				
 			if (p == eof)
 				clog_syntax_error(parser,"Unexpected end of file",parser->line);
 			else if (cs == %%{ write error; }%%)
 				clog_syntax_error(parser,"Unrecognized character",parser->line);
 								
-			if (parser->failed)
-				break;
-					
 			p = buffer;
 			if (ts)
 			{
@@ -525,5 +525,5 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 		clog_free(buffer);
 	}
 	
-	return err;
+	return ret;
 }

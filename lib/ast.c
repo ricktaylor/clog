@@ -13,18 +13,14 @@
 
 int clog_out_of_memory(struct clog_parser* parser)
 {
-	if (!parser->failed)
-		printf("Out of memory building AST\n");
-
+	printf("Out of memory building AST\n");
 	parser->failed = 1;
 	return 0;
 }
 
 int clog_syntax_error(struct clog_parser* parser, const char* msg, unsigned long line)
 {
-	if (!parser->failed)
-		printf("Syntax error at line %lu: %s\n",line,msg);
-
+	printf("Syntax error at line %lu: %s\n",line,msg);
 	parser->failed = 1;
 	return 0;
 }
@@ -65,6 +61,171 @@ int clog_token_alloc(struct clog_parser* parser, struct clog_token** token, cons
 	}
 
 	return 1;
+}
+
+static int clog_token_printf(unsigned int token_id, struct clog_token* token)
+{
+	switch (token_id)
+	{
+	case CLOG_TOKEN_THIS:
+	case CLOG_TOKEN_BASE:
+	case CLOG_TOKEN_ID:
+		if (token && token->type == clog_token_string)
+			return printf("%s",token->value.string.len ? (char*)token->value.string.str : "\"\"");
+		return printf("identifier");
+
+	case CLOG_TOKEN_STRING:
+		if (token && token->type == clog_token_string)
+			return printf("%s",token->value.string.len ? (char*)token->value.string.str : "\"\"");
+		return printf("string");
+
+	case CLOG_TOKEN_INTEGER:
+		if (token && token->type == clog_token_integer)
+			return printf("%ld",token->value.integer);
+		return printf("integer");
+
+	case CLOG_TOKEN_FLOAT:
+		if (token && token->type == clog_token_real)
+			return printf("%g",token->value.real);
+		return printf("float");
+
+	case CLOG_TOKEN_TRUE:
+		return printf("true");
+	case CLOG_TOKEN_FALSE:
+		return printf("false");
+	case CLOG_TOKEN_NULL:
+		return printf("null");
+	case CLOG_TOKEN_IF:
+		return printf("if");
+	case CLOG_TOKEN_OPEN_PAREN:
+		return printf("(");
+	case CLOG_TOKEN_CLOSE_PAREN:
+		return printf(")");
+	case CLOG_TOKEN_ELSE:
+		return printf("else");
+	case CLOG_TOKEN_WHILE:
+		return printf("while");
+	case CLOG_TOKEN_FOR:
+		return printf("for");
+	case CLOG_TOKEN_SEMI_COLON:
+		return printf(";");
+	case CLOG_TOKEN_DO:
+		return printf("do");
+	case CLOG_TOKEN_VAR:
+		return printf("var");
+	case CLOG_TOKEN_ASSIGN:
+		return printf("=");
+	case CLOG_TOKEN_OPEN_BRACE:
+		return printf("{");
+	case CLOG_TOKEN_CLOSE_BRACE:
+		return printf("}");
+	case CLOG_TOKEN_TRY:
+		return printf("try");
+	case CLOG_TOKEN_CATCH:
+		return printf("catch");
+	case CLOG_TOKEN_ELIPSIS:
+		return printf("...");
+	case CLOG_TOKEN_BREAK:
+		return printf("break");
+	case CLOG_TOKEN_CONTINUE:
+		return printf("continue");
+	case CLOG_TOKEN_RETURN:
+		return printf("return");
+	case CLOG_TOKEN_COMMA:
+		return printf(",");
+	case CLOG_TOKEN_STAR_ASSIGN:
+		return printf("*=");
+	case CLOG_TOKEN_SLASH_ASSIGN:
+		return printf("/=");
+	case CLOG_TOKEN_PERCENT_ASSIGN:
+		return printf("%%=");
+	case CLOG_TOKEN_PLUS_ASSIGN:
+		return printf("+=");
+	case CLOG_TOKEN_MINUS_ASSIGN:
+		return printf("-=");
+	case CLOG_TOKEN_RIGHT_SHIFT_ASSIGN:
+		return printf(">>=");
+	case CLOG_TOKEN_LEFT_SHIFT_ASSIGN:
+		return printf("<<=");
+	case CLOG_TOKEN_AMPERSAND_ASSIGN:
+		return printf("&=");
+	case CLOG_TOKEN_BITWISE_CARET_ASSIGN:
+		return printf("^=");
+	case CLOG_TOKEN_BAR_ASSIGN:
+		return printf("|=");
+	case CLOG_TOKEN_THROW:
+		return printf("throw");
+	case CLOG_TOKEN_QUESTION:
+		return printf("?");
+	case CLOG_TOKEN_COLON:
+		return printf(":");
+	case CLOG_TOKEN_OR:
+		return printf("||");
+	case CLOG_TOKEN_AND:
+		return printf("&&");
+	case CLOG_TOKEN_BAR:
+		return printf("|");
+	case CLOG_TOKEN_CARET:
+		return printf("^");
+	case CLOG_TOKEN_AMPERSAND:
+		return printf("&");
+	case CLOG_TOKEN_EQUALS:
+		return printf("==");
+	case CLOG_TOKEN_NOT_EQUALS:
+		return printf("!=");
+	case CLOG_TOKEN_LESS_THAN:
+		return printf("<");
+	case CLOG_TOKEN_GREATER_THAN:
+		return printf(">");
+	case CLOG_TOKEN_LESS_THAN_EQUALS:
+		return printf("<=");
+	case CLOG_TOKEN_GREATER_THAN_EQUALS:
+		return printf(">=");
+	case CLOG_TOKEN_LEFT_SHIFT:
+		return printf("<<");
+	case CLOG_TOKEN_RIGHT_SHIFT:
+		return printf(">>");
+	case CLOG_TOKEN_PLUS:
+		return printf("+");
+	case CLOG_TOKEN_MINUS:
+		return printf("-");
+	case CLOG_TOKEN_STAR:
+		return printf("*");
+	case CLOG_TOKEN_SLASH:
+		return printf("/");
+	case CLOG_TOKEN_PERCENT:
+		return printf("%%");
+	case CLOG_TOKEN_DOUBLE_PLUS:
+		return printf("++");
+	case CLOG_TOKEN_DOUBLE_MINUS:
+		return printf("--");
+	case CLOG_TOKEN_EXCLAMATION:
+		return printf("!");
+	case CLOG_TOKEN_TILDA:
+		return printf("~");
+	case CLOG_TOKEN_OPEN_BRACKET:
+		return printf("[");
+	case CLOG_TOKEN_CLOSE_BRACKET:
+		return printf("]");
+	case CLOG_TOKEN_DOT:
+		return printf(".");
+
+	default:
+		return printf("???");
+	}
+}
+
+int clog_syntax_error_token(struct clog_parser* parser, const char* pre, const char* post, unsigned int token_id, struct clog_token* token, unsigned long line)
+{
+	printf("Syntax error at line %lu: ",line);
+	if (pre)
+		printf("%s",pre);
+	clog_token_printf(token_id,token);
+	if (post)
+		printf("%s",post);
+	printf("\n");
+	parser->failed = 1;
+	return 0;
 }
 
 void clog_ast_literal_free(struct clog_parser* parser, struct clog_ast_literal* lit)
@@ -905,7 +1066,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		if ((*expr)->expr.builtin->args[0]->type != clog_ast_expression_identifier && !clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[0],reduction))
 			return 0;
 		if (!(*expr)->expr.builtin->args[0]->lvalue)
-			return clog_syntax_error(parser,"Assignment requires an lvalue",clog_ast_expression_line((*expr)->expr.builtin->args[0]));
+			return clog_syntax_error_token(parser,NULL," requires an lvalue",(*expr)->expr.builtin->type,NULL,clog_ast_expression_line((*expr)->expr.builtin->args[0]));
 
 		if ((*expr)->expr.builtin->args[0]->type != clog_ast_expression_identifier)
 		{
@@ -952,7 +1113,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			return 0;
 		}
 		if (!(*expr)->expr.builtin->args[0]->lvalue)
-			return clog_syntax_error(parser,"Assignment requires an lvalue",clog_ast_expression_line((*expr)->expr.builtin->args[0]));
+			return clog_syntax_error_token(parser,NULL," requires an lvalue",(*expr)->expr.builtin->type,NULL,clog_ast_expression_line((*expr)->expr.builtin->args[0]));
 
 		if ((*expr)->expr.builtin->args[0]->type != clog_ast_expression_identifier)
 		{
@@ -1001,7 +1162,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		if (!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[0],reduction))
 			return 0;
 		if (!(*expr)->expr.builtin->args[0]->lvalue)
-			return clog_syntax_error(parser,". requires an lvalue",clog_ast_expression_line((*expr)->expr.builtin->args[0]));
+			return clog_syntax_error_token(parser,NULL," requires an lvalue",(*expr)->expr.builtin->type,NULL,clog_ast_expression_line((*expr)->expr.builtin->args[0]));
 		return 1;
 
 	case CLOG_TOKEN_OPEN_BRACKET:
@@ -1100,7 +1261,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			{
 				if (!clog_ast_literal_arith_convert(p1,p2))
 				{
-					clog_syntax_error(parser,"+ requires  numbers or strings",p1->line);
+					clog_syntax_error(parser,"+ requires numbers or strings",p1->line);
 					goto failed;
 				}
 
@@ -1231,7 +1392,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		if (p1)
 		{
 			if (!clog_ast_literal_int_promote(p1))
-				return clog_syntax_error(parser,"~ requires integer",p1->line);
+				return clog_syntax_error(parser,"~ requires an integer",p1->line);
 
 			p1->value.integer = ~p1->value.integer;
 			goto replace_with_p1;
@@ -1314,7 +1475,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 
 				goto replace_with_p1;
 			}
-			clog_syntax_error(parser,(*expr)->expr.builtin->type == CLOG_TOKEN_RIGHT_SHIFT ? ">> requires integers" : "<< requires integers",p1->line);
+			clog_syntax_error_token(parser,NULL," requires integers",(*expr)->expr.builtin->type,NULL,p1->line);
 			goto failed;
 		}
 		break;
@@ -1330,7 +1491,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			int b = clog_ast_literal_compare(p1,p2);
 			if (b == -2)
 			{
-				clog_syntax_error(parser,"Comparison requires numbers or strings",p1->line);
+				clog_syntax_error_token(parser,NULL," requires numbers or strings",(*expr)->expr.builtin->type,NULL,p1->line);
 				goto failed;
 			}
 			switch ((*expr)->expr.builtin->type)
@@ -1411,12 +1572,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 
 				goto replace_with_p1;
 			}
-			if ((*expr)->expr.builtin->type == CLOG_TOKEN_BAR)
-				clog_syntax_error(parser,"| requires integers",p1->line);
-			if ((*expr)->expr.builtin->type == CLOG_TOKEN_CARET)
-				clog_syntax_error(parser,"^ requires integers",p1->line);
-			else
-				clog_syntax_error(parser,"& requires integers",p1->line);
+			clog_syntax_error_token(parser,NULL," requires integers",(*expr)->expr.builtin->type,NULL,p1->line);
 			goto failed;
 		}
 		break;
@@ -1572,7 +1728,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	case CLOG_TOKEN_LEFT_SHIFT_ASSIGN:
 		if (!clog_ast_literal_int_promote(reduction->value) || !clog_ast_literal_int_promote(p2))
 		{
-			clog_syntax_error(parser,(*expr)->expr.builtin->type == CLOG_TOKEN_RIGHT_SHIFT_ASSIGN ? ">>= requires an integer" : "<<= requires an integer",p2->line);
+			clog_syntax_error_token(parser,NULL," requires an integer",(*expr)->expr.builtin->type,NULL,p2->line);
 			goto failed;
 		}
 		if ((*expr)->expr.builtin->type == CLOG_TOKEN_RIGHT_SHIFT)
@@ -1586,12 +1742,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	case CLOG_TOKEN_BAR_ASSIGN:
 		if (!clog_ast_literal_int_promote(reduction->value) || !clog_ast_literal_int_promote(p2))
 		{
-			if ((*expr)->expr.builtin->type == CLOG_TOKEN_BAR_ASSIGN)
-				clog_syntax_error(parser,"|= requires an integer",p2->line);
-			else if ((*expr)->expr.builtin->type == CLOG_TOKEN_BITWISE_CARET_ASSIGN)
-				clog_syntax_error(parser,"^= requires an integer",p2->line);
-			else
-				clog_syntax_error(parser,"&= requires an integer",p2->line);
+			clog_syntax_error_token(parser,NULL," requires an integer",(*expr)->expr.builtin->type,NULL,p2->line);
 			goto failed;
 		}
 		if ((*expr)->expr.builtin->type == CLOG_TOKEN_BAR)
@@ -2648,14 +2799,14 @@ int clog_ast_statement_list_alloc_return(struct clog_parser* parser, struct clog
 
 
 
-static void clog_ast_indent(size_t indent)
+static void __dump_indent(size_t indent)
 {
 	size_t t = 0;
 	for (;t < indent;++t)
 		printf("    ");
 }
 
-static void clog_ast_dump_literal(const struct clog_ast_literal* lit)
+static void __dump_literal(const struct clog_ast_literal* lit)
 {
 	switch (lit->type)
 	{
@@ -2681,28 +2832,28 @@ static void clog_ast_dump_literal(const struct clog_ast_literal* lit)
 	}
 }
 
-static void clog_ast_dump_expr(const struct clog_ast_expression* expr);
+static void __dump_expr(const struct clog_ast_expression* expr);
 
-static void clog_ast_dump_expr_list(const struct clog_ast_expression_list* list)
+static void __dump_expr_list(const struct clog_ast_expression_list* list)
 {
 	for (;list;list = list->next)
 	{
-		clog_ast_dump_expr(list->expr);
+		__dump_expr(list->expr);
 		if (list->next)
 			printf(",");
 	}
 }
 
-static void clog_ast_dump_expr_b(const struct clog_ast_expression* expr)
+static void __dump_expr_b(const struct clog_ast_expression* expr)
 {
 	if (expr->type == clog_ast_expression_builtin)
 		printf("(");
-	clog_ast_dump_expr(expr);
+	__dump_expr(expr);
 	if (expr->type == clog_ast_expression_builtin)
 		printf(")");
 }
 
-static void clog_ast_dump_expr(const struct clog_ast_expression* expr)
+static void __dump_expr(const struct clog_ast_expression* expr)
 {
 	switch (expr->type)
 	{
@@ -2711,79 +2862,57 @@ static void clog_ast_dump_expr(const struct clog_ast_expression* expr)
 		break;
 
 	case clog_ast_expression_literal:
-		clog_ast_dump_literal(expr->expr.literal);
+		__dump_literal(expr->expr.literal);
 		break;
 
 	case clog_ast_expression_builtin:
 		if (expr->expr.builtin->args[1])
-			clog_ast_dump_expr(expr->expr.builtin->args[0]);
+			__dump_expr(expr->expr.builtin->args[0]);
 
 		switch (expr->expr.builtin->type)
 		{
-		case CLOG_TOKEN_ASSIGN:
-			printf(" = ");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
-			break;
-
-		case CLOG_TOKEN_EQUALS:
-			printf(" == ");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
-			break;
-
-		case CLOG_TOKEN_LESS_THAN:
-			printf(" < ");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
-			break;
-
-		case CLOG_TOKEN_DOT:
-			printf(".");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
-			break;
-
-		case CLOG_TOKEN_COMMA:
-			printf(",");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
-			break;
-
-		case CLOG_TOKEN_PLUS_ASSIGN:
-			printf(" += ");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
-			break;
-
-		case CLOG_TOKEN_EXCLAMATION:
-			printf("!");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[0]);
-			break;
-
 		case CLOG_TOKEN_DOUBLE_PLUS:
 			if (expr->lvalue)
 				printf("++");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[0]);
+			__dump_expr_b(expr->expr.builtin->args[0]);
+			if (!expr->lvalue)
+				printf("++");
+			break;
+
+		case CLOG_TOKEN_DOUBLE_MINUS:
+			if (expr->lvalue)
+				printf("++");
+			__dump_expr_b(expr->expr.builtin->args[0]);
 			if (!expr->lvalue)
 				printf("++");
 			break;
 
 		case CLOG_TOKEN_QUESTION:
 			printf(" ? ");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
+			__dump_expr_b(expr->expr.builtin->args[1]);
 			printf(" : ");
-			clog_ast_dump_expr_b(expr->expr.builtin->args[2]);
+			__dump_expr_b(expr->expr.builtin->args[2]);
 			break;
 
 		default:
-			if (!expr->expr.builtin->args[1])
-				clog_ast_dump_expr_b(expr->expr.builtin->args[0]);
-			printf(" OP ");
 			if (expr->expr.builtin->args[1])
-				clog_ast_dump_expr_b(expr->expr.builtin->args[1]);
+				printf(" ");
+			clog_token_printf(expr->expr.builtin->type,NULL);
+			if (expr->expr.builtin->args[1])
+			{
+				printf(" ");
+				__dump_expr_b(expr->expr.builtin->args[1]);
+			}
+			else
+				__dump_expr(expr->expr.builtin->args[0]);
 			break;
 		}
 		break;
 
 	case clog_ast_expression_call:
-		clog_ast_dump_expr(expr->expr.call->expr);
+		__dump_expr(expr->expr.call->expr);
 		printf("(");
-		clog_ast_dump_expr_list(expr->expr.call->params);
+		__dump_expr_list(expr->expr.call->params);
 		printf(")");
 		break;
 	}
@@ -2796,18 +2925,18 @@ static void clog_ast_dump_expr(const struct clog_ast_expression* expr)
 	printf("]");*/
 }
 
-static void clog_ast_dump(size_t indent, const struct clog_ast_statement_list* list)
+static void __dump(size_t indent, const struct clog_ast_statement_list* list)
 {
 	for (;list;list = list->next)
 	{
-		clog_ast_indent(indent);
+		__dump_indent(indent);
 
 		switch (list->stmt->type)
 		{
 		case clog_ast_statement_block:
 			printf("{\n");
-			clog_ast_dump(indent+1,list->stmt->stmt.block);
-			clog_ast_indent(indent);
+			__dump(indent+1,list->stmt->stmt.block);
+			__dump_indent(indent);
 			printf("}\n");
 			break;
 
@@ -2816,13 +2945,13 @@ static void clog_ast_dump(size_t indent, const struct clog_ast_statement_list* l
 			break;
 
 		case clog_ast_statement_expression:
-			clog_ast_dump_expr(list->stmt->stmt.expression);
+			__dump_expr(list->stmt->stmt.expression);
 			printf(";\n");
 			break;
 
 		case clog_ast_statement_return:
 			printf("return ");
-			clog_ast_dump_expr(list->stmt->stmt.expression);
+			__dump_expr(list->stmt->stmt.expression);
 			printf(";\n");
 			break;
 
@@ -2836,43 +2965,43 @@ static void clog_ast_dump(size_t indent, const struct clog_ast_statement_list* l
 
 		case clog_ast_statement_if:
 			printf("if (");
-			clog_ast_dump_expr(list->stmt->stmt.if_stmt->condition);
+			__dump_expr(list->stmt->stmt.if_stmt->condition);
 			printf(")\n");
 			if (list->stmt->stmt.if_stmt->true_stmt)
 			{
 				if (list->stmt->stmt.if_stmt->true_stmt->stmt->type == clog_ast_statement_block)
-					clog_ast_dump(indent,list->stmt->stmt.if_stmt->true_stmt);
+					__dump(indent,list->stmt->stmt.if_stmt->true_stmt);
 				else
-					clog_ast_dump(indent+1,list->stmt->stmt.if_stmt->true_stmt);
+					__dump(indent+1,list->stmt->stmt.if_stmt->true_stmt);
 			}
 			else
 			{
-				clog_ast_indent(indent+1);
+				__dump_indent(indent+1);
 				printf(";\n");
 			}
 			if (list->stmt->stmt.if_stmt->false_stmt)
 			{
-				clog_ast_indent(indent);
+				__dump_indent(indent);
 				printf("else\n");
 				if (list->stmt->stmt.if_stmt->false_stmt->stmt->type == clog_ast_statement_block)
-					clog_ast_dump(indent,list->stmt->stmt.if_stmt->false_stmt);
+					__dump(indent,list->stmt->stmt.if_stmt->false_stmt);
 				else
-					clog_ast_dump(indent+1,list->stmt->stmt.if_stmt->false_stmt);
+					__dump(indent+1,list->stmt->stmt.if_stmt->false_stmt);
 			}
 			break;
 
 		case clog_ast_statement_do:
 			printf("do\n");
 			if (list->stmt->stmt.do_stmt->loop_stmt)
-				clog_ast_dump(indent+1,list->stmt->stmt.do_stmt->loop_stmt);
+				__dump(indent+1,list->stmt->stmt.do_stmt->loop_stmt);
 			else
 			{
-				clog_ast_indent(indent+1);
+				__dump_indent(indent+1);
 				printf(";\n");
 			}
-			clog_ast_indent(indent);
+			__dump_indent(indent);
 			printf("  while (");
-			clog_ast_dump_expr(list->stmt->stmt.do_stmt->condition);
+			__dump_expr(list->stmt->stmt.do_stmt->condition);
 			printf(")\n");
 			break;
 		}
@@ -2909,10 +3038,10 @@ int clog_parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_
 
 	clog_parserFree(lemon,&clog_free);
 
-	if (!retval && !parser.failed)
+	if (retval && !parser.failed)
 		printf("Success!\n");
 
-	clog_ast_dump(0,parser.pgm);
+	__dump(0,parser.pgm);
 
 	clog_ast_statement_list_free(&parser,parser.pgm);
 

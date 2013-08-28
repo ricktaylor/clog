@@ -24,9 +24,9 @@ static int read_fn(void* p, unsigned char* buf, size_t* len)
 {
 	*len = fread(buf,1,*len,(FILE*)p);
 	if (*len == 0 && ferror((FILE*)p))
-		return -1;
+		return 0;
 
-	return 0;
+	return 1;
 }
 
 int main(int argc, char* argv[])

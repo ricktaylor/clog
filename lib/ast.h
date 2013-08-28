@@ -9,7 +9,6 @@
 #define AST_H_
 
 #include <stddef.h>
-#include <stdarg.h>
 
 void* clog_malloc(size_t s);
 void* clog_realloc(void* p, size_t s);
@@ -48,6 +47,7 @@ struct clog_token
 
 void clog_token_free(struct clog_parser* parser, struct clog_token* token);
 int clog_token_alloc(struct clog_parser* parser, struct clog_token** token, const unsigned char* sz, size_t len);
+int clog_syntax_error_token(struct clog_parser* parser, const char* pre, const char* post, unsigned int token_id, struct clog_token* token, unsigned long line);
 
 /* Literal handling */
 struct clog_ast_literal

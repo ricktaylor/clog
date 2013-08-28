@@ -17,7 +17,7 @@
 %token_destructor { clog_token_free(parser,$$); }
 
 %extra_argument { struct clog_parser* parser }
-%syntax_error { clog_syntax_error(parser,"Unexpected token",parser->line); }
+%syntax_error { clog_syntax_error_token(parser,"Unexpected token near ",NULL,yymajor,TOKEN,parser->line); }
 
 %start_symbol program
 
@@ -31,6 +31,7 @@ program ::= .                  { parser->pgm = NULL; }
 
 statement_list(A) ::= statement(B).                   { A = B; }
 statement_list(A) ::= statement_list(B) statement(C). { A = clog_ast_statement_list_append(parser,B,C); }
+statement_list(A) ::= statement_list(B) error.        { A = B; }
 
 statement(A) ::= simple_statement(B). { A = B; }
 statement(A) ::= dangling_if(B).      { A = B; }
