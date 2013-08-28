@@ -11,6 +11,8 @@
 #include <string.h>
 #include <stdio.h>
 
+static void __dump(size_t indent, const struct clog_ast_statement_list* list);
+
 int clog_out_of_memory(struct clog_parser* parser)
 {
 	printf("Out of memory building AST\n");
@@ -1115,7 +1117,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		if (!(*expr)->expr.builtin->args[0]->lvalue)
 			return clog_syntax_error_token(parser,NULL," requires an lvalue",(*expr)->expr.builtin->type,NULL,clog_ast_expression_line((*expr)->expr.builtin->args[0]));
 
-		if ((*expr)->expr.builtin->args[0]->type != clog_ast_expression_identifier)
+		if ((*expr)->expr.builtin->args[0]->type == clog_ast_expression_builtin)
 		{
 			if ((*expr)->expr.builtin->args[0]->expr.builtin->type == CLOG_TOKEN_DOT ||
 					(*expr)->expr.builtin->args[0]->expr.builtin->type == CLOG_TOKEN_OPEN_BRACKET)
@@ -1680,7 +1682,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			if (!reduction->value->value.string.len)
 			{
 				clog_ast_literal_free(parser,reduction->value);
-				reduction->value = NULL;
 				reduction->value = p2;
 				p2 = NULL;
 			}
@@ -2006,51 +2007,45 @@ static void clog_ast_statement_list_flatten(struct clog_parser* parser, struct c
 	clog_ast_statement_list_flatten(parser,&(*list)->next);
 }
 
-static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, struct clog_ast_statement_list** block);
+static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, struct clog_ast_statement_list** block, struct clog_ast_reduction* reduction);
 static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct clog_ast_statement_list** if_stmt, struct clog_ast_reduction* reduction);
 static int clog_ast_statement_list_reduce_do(struct clog_parser* parser, struct clog_ast_statement_list** if_stmt, struct clog_ast_reduction* reduction);
 
-static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_reduction* reduction)
+static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clog_ast_statement_list** stmt, struct clog_ast_reduction* reduction)
 {
-	struct clog_ast_statement_list* l = *list;
-	struct clog_ast_statement_list** prev = list;
-
 	/* Reduce each statement */
-	for (;l;l = *prev)
+	while (*stmt)
 	{
-		switch (l->stmt->type)
+		switch ((*stmt)->stmt->type)
 		{
 		case clog_ast_statement_expression:
-			if (!clog_ast_expression_reduce(parser,&l->stmt->stmt.expression,reduction))
+			if (!clog_ast_expression_reduce(parser,&(*stmt)->stmt->stmt.expression,reduction))
 				return 0;
 
-			if (l->stmt->stmt.expression->type == clog_ast_expression_builtin)
+			if ((*stmt)->stmt->stmt.expression->type == clog_ast_expression_builtin)
 			{
-				switch (l->stmt->stmt.expression->expr.builtin->type)
+				switch ((*stmt)->stmt->stmt.expression->expr.builtin->type)
 				{
 				case CLOG_TOKEN_COMMA:
 					{
 						/* Rewrite comma expressions as statements */
-						struct clog_ast_expression* e0 = l->stmt->stmt.expression->expr.builtin->args[0];
-						struct clog_ast_expression* e1 = l->stmt->stmt.expression->expr.builtin->args[1];
-						struct clog_ast_statement_list* n = l->next;
+						struct clog_ast_expression* e0 = (*stmt)->stmt->stmt.expression->expr.builtin->args[0];
+						struct clog_ast_expression* e1 = (*stmt)->stmt->stmt.expression->expr.builtin->args[1];
+						struct clog_ast_statement_list* n = (*stmt)->next;
 
-						l->stmt->stmt.expression->expr.builtin->args[0] = NULL;
-						l->stmt->stmt.expression->expr.builtin->args[1] = NULL;
-						clog_ast_expression_free(parser,l->stmt->stmt.expression);
-						l->stmt->stmt.expression = e0;
+						(*stmt)->stmt->stmt.expression->expr.builtin->args[0] = NULL;
+						(*stmt)->stmt->stmt.expression->expr.builtin->args[1] = NULL;
+						clog_ast_expression_free(parser,(*stmt)->stmt->stmt.expression);
+						(*stmt)->stmt->stmt.expression = e0;
 
-						if (!clog_ast_statement_list_alloc_expression(parser,&l->next,e1))
+						if (!clog_ast_statement_list_alloc_expression(parser,&(*stmt)->next,e1))
 						{
-							l->next = n;
+							(*stmt)->next = n;
 							return 0;
 						}
 
+						*stmt = clog_ast_statement_list_append(parser,*stmt,n);
 						reduction->reduced = 1;
-						if (!l->next)
-							l->next = n;
-						else
-							l->next->next = n;
 					}
 					break;
 
@@ -2065,20 +2060,20 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 				case CLOG_TOKEN_BAR:
 				case CLOG_TOKEN_AND:
 				case CLOG_TOKEN_OR:
-					if (l->stmt->stmt.expression->expr.builtin->args[0]->constant)
+					if ((*stmt)->stmt->stmt.expression->expr.builtin->args[0]->constant)
 					{
-						struct clog_ast_expression* e = l->stmt->stmt.expression->expr.builtin->args[1];
-						l->stmt->stmt.expression->expr.builtin->args[1] = NULL;
-						clog_ast_expression_free(parser,l->stmt->stmt.expression);
-						l->stmt->stmt.expression = e;
+						struct clog_ast_expression* e = (*stmt)->stmt->stmt.expression->expr.builtin->args[1];
+						(*stmt)->stmt->stmt.expression->expr.builtin->args[1] = NULL;
+						clog_ast_expression_free(parser,(*stmt)->stmt->stmt.expression);
+						(*stmt)->stmt->stmt.expression = e;
 						reduction->reduced = 1;
 					}
-					else if (l->stmt->stmt.expression->expr.builtin->args[1]->constant)
+					else if ((*stmt)->stmt->stmt.expression->expr.builtin->args[1]->constant)
 					{
-						struct clog_ast_expression* e = l->stmt->stmt.expression->expr.builtin->args[0];
-						l->stmt->stmt.expression->expr.builtin->args[0] = NULL;
-						clog_ast_expression_free(parser,l->stmt->stmt.expression);
-						l->stmt->stmt.expression = e;
+						struct clog_ast_expression* e = (*stmt)->stmt->stmt.expression->expr.builtin->args[0];
+						(*stmt)->stmt->stmt.expression->expr.builtin->args[0] = NULL;
+						clog_ast_expression_free(parser,(*stmt)->stmt->stmt.expression);
+						(*stmt)->stmt->stmt.expression = e;
 						reduction->reduced = 1;
 					}
 					break;
@@ -2086,10 +2081,10 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 				case CLOG_TOKEN_EXCLAMATION:
 				case CLOG_TOKEN_TILDA:
 					{
-						struct clog_ast_expression* e = l->stmt->stmt.expression->expr.builtin->args[0];
-						l->stmt->stmt.expression->expr.builtin->args[0] = NULL;
-						clog_ast_expression_free(parser,l->stmt->stmt.expression);
-						l->stmt->stmt.expression = e;
+						struct clog_ast_expression* e = (*stmt)->stmt->stmt.expression->expr.builtin->args[0];
+						(*stmt)->stmt->stmt.expression->expr.builtin->args[0] = NULL;
+						clog_ast_expression_free(parser,(*stmt)->stmt->stmt.expression);
+						(*stmt)->stmt->stmt.expression = e;
 						reduction->reduced = 1;
 					}
 					break;
@@ -2099,178 +2094,154 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 				}
 			}
 
-			if (l->stmt->stmt.expression->constant)
+			if ((*stmt)->stmt->stmt.expression->constant)
 				goto drop;
 
 			break;
 
-		case clog_ast_statement_return:
-			if (!clog_ast_expression_reduce(parser,&l->stmt->stmt.expression,reduction))
-				return 0;
-
-			/* Anything after return is unreachable... */
-			if (l->next)
-			{
-				reduction->reduced = 1;
-				clog_ast_statement_list_free(parser,l->next);
-				l->next = NULL;
-			}
-			return 1;
-
 		case clog_ast_statement_block:
-			if (!clog_ast_statement_list_reduce(parser,&l->stmt->stmt.block,reduction) ||
-					!clog_ast_statement_list_reduce_block(parser,&l->stmt->stmt.block))
-			{
+			if (!clog_ast_statement_list_reduce_block(parser,&(*stmt)->stmt->stmt.block,reduction))
 				return 0;
-			}
 
-			if (!l->stmt->stmt.block)
+			if (!(*stmt)->stmt->stmt.block)
 				goto drop;
 
 			break;
 
 		case clog_ast_statement_declaration:
-			/* Declaration is always followed by an assign, reduce the assign */
-			if (!clog_ast_expression_reduce(parser,&l->next->stmt->stmt.expression->expr.builtin->args[1],reduction))
-				return 0;
-
-			if (l->next->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_builtin &&
-					l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->type == CLOG_TOKEN_COMMA)
+			/* Rewrite comma expressions as statements before the declaration */
+			if ((*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_builtin &&
+					(*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->type == CLOG_TOKEN_COMMA)
 			{
-				/* Rewrite comma expressions as statements before the declaration */
-				struct clog_ast_expression* e0 = l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[0];
-				struct clog_ast_expression* e1 = l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[1];
-				struct clog_ast_statement_list* p = *prev;
+				struct clog_ast_expression* e0 = (*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[0];
+				struct clog_ast_expression* e1 = (*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[1];
+				struct clog_ast_statement_list* p = *stmt;
 
-				l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[0] = NULL;
-				l->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[1] = NULL;
-				clog_ast_expression_free(parser,l->next->stmt->stmt.expression->expr.builtin->args[1]);
-				l->next->stmt->stmt.expression->expr.builtin->args[1] = e1;
+				(*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[0] = NULL;
+				(*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->args[1] = NULL;
+				clog_ast_expression_free(parser,(*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]);
+				(*stmt)->next->stmt->stmt.expression->expr.builtin->args[1] = e1;
 
-				if (!clog_ast_statement_list_alloc_expression(parser,prev,e0))
+				if (!clog_ast_statement_list_alloc_expression(parser,stmt,e0))
 				{
-					*prev = p;
+					*stmt = p;
 					return 0;
 				}
+				*stmt = clog_ast_statement_list_append(parser,*stmt,p);
 				reduction->reduced = 1;
-				if (!*prev)
-					*prev = p;
-				else
-					(*prev)->next = p;
+				continue;
 			}
 
+			stmt = &(*stmt)->next;
+
+			/* Reduce the assignment expression that follows */
+			if (!clog_ast_expression_reduce(parser,&(*stmt)->stmt->stmt.expression->expr.builtin->args[1],reduction))
+				return 0;
+
 			/* Check if new variable hides the one we are reducing */
-			if (reduction->id && clog_ast_literal_id_compare(reduction->id,l->next->stmt->stmt.expression->expr.builtin->args[0]->expr.identifier) == 0)
-				return 1;
+			if (reduction->id && clog_ast_literal_id_compare(reduction->id,(*stmt)->stmt->stmt.expression->expr.builtin->args[0]->expr.identifier) == 0)
+			{
+				int ret = 1;
+				struct clog_ast_literal* old_value = reduction->value;
+
+				ret = clog_ast_expression_eval(parser,&reduction->value,(*stmt)->stmt->stmt.expression->expr.builtin->args[1],reduction->id,reduction->value);
+				if (ret && reduction->value)
+					ret = clog_ast_statement_list_reduce(parser,&(*stmt)->next,reduction);
+
+				clog_ast_literal_free(parser,reduction->value);
+				reduction->value = old_value;
+				return ret;
+			}
 			break;
 
 		case clog_ast_statement_if:
-			if (!clog_ast_statement_list_reduce_if(parser,prev,reduction))
+			if (!clog_ast_statement_list_reduce_if(parser,stmt,reduction))
 				return 0;
-
-			if (*prev != l)
-				l = *prev;
 			break;
 
 		case clog_ast_statement_do:
-			if (!clog_ast_statement_list_reduce_do(parser,prev,reduction))
+			if (!clog_ast_statement_list_reduce_do(parser,stmt,reduction))
+				return 0;
+			break;
+
+		case clog_ast_statement_return:
+			if (!clog_ast_expression_reduce(parser,&(*stmt)->stmt->stmt.expression,reduction))
 				return 0;
 
-			if (*prev != l)
-				l = *prev;
-			break;
+			/* Anything after return is unreachable... */
+			if ((*stmt)->next)
+			{
+				reduction->reduced = 1;
+				clog_ast_statement_list_free(parser,(*stmt)->next);
+				(*stmt)->next = NULL;
+			}
+			return 1;
 
 		case clog_ast_statement_break:
 		case clog_ast_statement_continue:
 			/* Anything after break or continue is unreachable... */
-			if (l->next)
+			if ((*stmt)->next)
 			{
 				reduction->reduced = 1;
-				clog_ast_statement_list_free(parser,l->next);
-				l->next = NULL;
+				clog_ast_statement_list_free(parser,(*stmt)->next);
+				(*stmt)->next = NULL;
 			}
 			return 1;
 		}
 
-		prev = &l->next;
+		stmt = &(*stmt)->next;
 		continue;
 
 	drop:
-		*prev = l->next;
-		l->next = NULL;
-		clog_ast_statement_list_free(parser,l);
-		reduction->reduced = 1;
-		return 1;
+		{
+			struct clog_ast_statement_list* next = (*stmt)->next;
+			(*stmt)->next = NULL;
+			clog_ast_statement_list_free(parser,*stmt);
+			*stmt = next;
+			reduction->reduced = 1;
+		}
 	}
 
 	return 1;
 }
 
-static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, struct clog_ast_statement_list** block)
+static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, struct clog_ast_statement_list** block, struct clog_ast_reduction* reduction)
 {
 	struct clog_ast_statement_list* l;
 
-	/* Check for duplicate declarations first */
-	for (l = *block;l;l = l->next)
-	{
-		if (l->stmt->type == clog_ast_statement_declaration)
-		{
-			struct clog_ast_statement_list* l2 = l->next;
-			for (;l2;l2 = l2->next)
-			{
-				if (l2->stmt->type == clog_ast_statement_declaration)
-				{
-					if (clog_ast_literal_id_compare(l->stmt->stmt.declaration,l2->stmt->stmt.declaration) == 0)
-						return clog_syntax_error(parser,"Variable already declared",l2->stmt->stmt.declaration->line);
-				}
-			}
-		}
-	}
+	if (!clog_ast_statement_list_reduce(parser,block,reduction))
+		return 0;
 
 	/* Now reduce the block with each declared variable */
-	for (;;)
+	for (l = *block;l;l = l->next)
 	{
-		struct clog_ast_reduction reduction = {0};
-		struct clog_ast_statement_list* l = *block;
-
-		/* Reduce with no variables first */
-		if (!clog_ast_statement_list_reduce(parser,block,&reduction))
-			return 0;
-		if (reduction.reduced)
-			continue;
-
-		/* For each declaration */
-		for (l = *block;l;l = l->next)
+		struct clog_ast_reduction reduction2;
+		if (l->stmt->type == clog_ast_statement_declaration)
 		{
-			if (l->stmt->type == clog_ast_statement_declaration)
+			/* Declaration is always followed by an assign */
+			reduction2.id = l->stmt->stmt.declaration;
+			reduction2.reduced = 0;
+
+			l = l->next;
+
+			/* Reduce the assignment expression that follows */
+			if (!clog_ast_expression_reduce(parser,&l->stmt->stmt.expression->expr.builtin->args[1],reduction))
+				return 0;
+
+			if (!clog_ast_expression_eval(parser,&reduction2.value,l->stmt->stmt.expression->expr.builtin->args[1],NULL,NULL))
+				return 0;
+
+			if (reduction2.value)
 			{
-				/* Declaration is always followed by an assign */
-				reduction.id = l->stmt->stmt.declaration;
-				reduction.reduced = 0;
+				int ret = clog_ast_statement_list_reduce(parser,&l->next,&reduction2);
+				clog_ast_literal_free(parser,reduction2.value);
+				if (!ret)
+					return 0;
 
-				l = l->next;
-
-				if (l->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_literal)
-				{
-					if (!clog_ast_literal_clone(parser,&reduction.value,l->stmt->stmt.expression->expr.builtin->args[1]->expr.literal))
-						return 0;
-
-					if (reduction.value)
-					{
-						if (!clog_ast_statement_list_reduce(parser,&l->next,&reduction))
-						{
-							clog_ast_literal_free(parser,reduction.value);
-							return 0;
-						}
-
-						clog_ast_literal_free(parser,reduction.value);
-					}
-				}
+				if (reduction2.reduced)
+					reduction->reduced = 1;
 			}
 		}
-
-		if (!reduction.reduced)
-			break;
 	}
 
 	return 1;
@@ -2279,6 +2250,8 @@ static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, stru
 static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct clog_ast_statement_list** if_stmt, struct clog_ast_reduction* reduction)
 {
 	struct clog_ast_literal* if_lit;
+	struct clog_ast_literal* true_value = NULL;
+	struct clog_ast_literal* false_value = NULL;
 
 	if (!clog_ast_expression_reduce(parser,&(*if_stmt)->stmt->stmt.if_stmt->condition,reduction))
 		return 0;
@@ -2312,12 +2285,83 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 		return 1;
 	}
 
-	/* Clear value and reduce both statements */
-	clog_ast_literal_free(parser,reduction->value);
-	reduction->value = NULL;
+	/* Reduce both statements */
+	if (reduction->value)
+	{
+		if ((*if_stmt)->stmt->stmt.if_stmt->true_stmt)
+		{
+			struct clog_ast_literal* old_value = reduction->value;
+			if (!clog_ast_literal_clone(parser,&reduction->value,old_value))
+				return 0;
 
-	if (!clog_ast_statement_list_reduce(parser,&(*if_stmt)->stmt->stmt.if_stmt->true_stmt,reduction) ||
-			!clog_ast_statement_list_reduce(parser,&(*if_stmt)->stmt->stmt.if_stmt->false_stmt,reduction))
+			if (!clog_ast_statement_list_reduce(parser,&(*if_stmt)->stmt->stmt.if_stmt->true_stmt,reduction))
+			{
+				clog_ast_literal_free(parser,old_value);
+				return 0;
+			}
+
+			true_value = reduction->value;
+			reduction->value = old_value;
+		}
+		if ((*if_stmt)->stmt->stmt.if_stmt->false_stmt)
+		{
+			struct clog_ast_literal* old_value = reduction->value;
+			if (!clog_ast_literal_clone(parser,&reduction->value,old_value))
+				return 0;
+
+			if (!clog_ast_statement_list_reduce(parser,&(*if_stmt)->stmt->stmt.if_stmt->false_stmt,reduction))
+			{
+				clog_ast_literal_free(parser,old_value);
+				return 0;
+			}
+
+			false_value = reduction->value;
+			reduction->value = old_value;
+		}
+
+		/* If both sides result in the same value, carry on */
+		if ((*if_stmt)->stmt->stmt.if_stmt->true_stmt &&
+				(*if_stmt)->stmt->stmt.if_stmt->false_stmt)
+		{
+			if (clog_ast_literal_compare(true_value,false_value) == 0)
+			{
+				clog_ast_literal_free(parser,false_value);
+				clog_ast_literal_free(parser,reduction->value);
+				reduction->value = true_value;
+			}
+			else
+			{
+				clog_ast_literal_free(parser,true_value);
+				clog_ast_literal_free(parser,false_value);
+				clog_ast_literal_free(parser,reduction->value);
+				reduction->value = NULL;
+			}
+		}
+		else if ((*if_stmt)->stmt->stmt.if_stmt->true_stmt)
+		{
+			if (clog_ast_literal_compare(true_value,reduction->value) == 0)
+				clog_ast_literal_free(parser,true_value);
+			else
+			{
+				clog_ast_literal_free(parser,true_value);
+				clog_ast_literal_free(parser,reduction->value);
+				reduction->value = NULL;
+			}
+		}
+		else if ((*if_stmt)->stmt->stmt.if_stmt->false_stmt)
+		{
+			if (clog_ast_literal_compare(false_value,reduction->value) == 0)
+				clog_ast_literal_free(parser,false_value);
+			else
+			{
+				clog_ast_literal_free(parser,false_value);
+				clog_ast_literal_free(parser,reduction->value);
+				reduction->value = NULL;
+			}
+		}
+	}
+	else if (!clog_ast_statement_list_reduce(parser,&(*if_stmt)->stmt->stmt.if_stmt->true_stmt,reduction) ||
+				!clog_ast_statement_list_reduce(parser,&(*if_stmt)->stmt->stmt.if_stmt->false_stmt,reduction))
 	{
 		return 0;
 	}
@@ -2397,6 +2441,9 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 	if (!block)
 		return 1;
 
+	/* Check for blocks in block */
+	clog_ast_statement_list_flatten(parser,&block);
+
 	/* Check for block containing only 1 block */
 	if (block->stmt->type == clog_ast_statement_block && block->next == NULL)
 	{
@@ -2404,25 +2451,59 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 		return 1;
 	}
 
-	/* Check for blocks in block */
-	clog_ast_statement_list_flatten(parser,&block);
+	/* Check for duplicate declarations first */
+	{
+		struct clog_ast_statement_list* l;
+		for (l = block;l;l = l->next)
+		{
+			if (l->stmt->type == clog_ast_statement_declaration)
+			{
+				struct clog_ast_statement_list* l2 = l->next;
+				for (;l2;l2 = l2->next)
+				{
+					if (l2->stmt->type == clog_ast_statement_declaration)
+					{
+						if (clog_ast_literal_id_compare(l->stmt->stmt.declaration,l2->stmt->stmt.declaration) == 0)
+						{
+							clog_ast_statement_list_free(parser,block);
+							return clog_syntax_error(parser,"Variable already declared",l2->stmt->stmt.declaration->line);
+						}
+					}
+				}
+			}
+		}
+	}
 
-	/* Now reduce the block */
-	if (!clog_ast_statement_list_reduce_block(parser,&block))
+	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_block))
 	{
 		clog_ast_statement_list_free(parser,block);
 		return 0;
 	}
 
-	if (block)
-	{
-		if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_block))
-		{
-			clog_ast_statement_list_free(parser,block);
-			return 0;
-		}
+	(*list)->stmt->stmt.block = block;
 
-		(*list)->stmt->stmt.block = block;
+	printf("WAS:\n");
+	__dump(1,*list);
+
+	/* Now reduce the block */
+	{
+		struct clog_ast_reduction reduction = {0};
+		do
+		{
+			reduction.reduced = 0;
+
+			if (!clog_ast_statement_list_reduce(parser,list,&reduction))
+			{
+				clog_ast_statement_list_free(parser,*list);
+				return 0;
+			}
+
+			printf("NOW:\n");
+			__dump(1,*list);
+		}
+		while (*list && reduction.reduced);
+
+		printf("DONE\n\n");
 	}
 
 	return 1;
@@ -2892,6 +2973,11 @@ static void __dump_expr(const struct clog_ast_expression* expr)
 			__dump_expr_b(expr->expr.builtin->args[1]);
 			printf(" : ");
 			__dump_expr_b(expr->expr.builtin->args[2]);
+			break;
+
+		case CLOG_TOKEN_COMMA:
+			printf(", ");
+			__dump_expr_b(expr->expr.builtin->args[1]);
 			break;
 
 		default:
