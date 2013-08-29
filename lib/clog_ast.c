@@ -246,7 +246,7 @@ static int clog_ast_literal_clone(struct clog_parser* parser, struct clog_ast_li
 	*new = NULL;
 
 	if (!lit)
-		return 0;
+		return 1;
 
 	*new = clog_malloc(sizeof(struct clog_ast_literal));
 	if (!*new)
@@ -896,9 +896,7 @@ static int clog_ast_expression_eval(struct clog_parser* parser, struct clog_ast_
 			if (clog_ast_literal_id_compare(reduction->id,expr->expr.identifier) == 0)
 			{
 				reduction->dereferenced = 1;
-
-				if (reduction->value)
-					return clog_ast_literal_clone(parser,v,reduction->value);
+				return clog_ast_literal_clone(parser,v,reduction->value);
 			}
 			break;
 
@@ -2194,11 +2192,12 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 			/* Check if new variable hides the one we are reducing */
 			if (reduction->id && clog_ast_literal_id_compare(reduction->id,(*stmt)->stmt->stmt.expression->expr.builtin->args[0]->expr.identifier) == 0)
 			{
+				/* Reduce with new value */
 				int ret = 1;
 				struct clog_ast_literal* old_value = reduction->value;
 
 				ret = clog_ast_expression_eval(parser,&reduction->value,(*stmt)->stmt->stmt.expression->expr.builtin->args[1],reduction);
-				if (ret && reduction->value)
+				if (ret)
 					ret = clog_ast_statement_list_reduce(parser,&(*stmt)->next,reduction);
 
 				clog_ast_literal_free(parser,reduction->value);
@@ -2242,7 +2241,9 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 			return 1;
 		}
 
-		stmt = &(*stmt)->next;
+		if (*stmt)
+			stmt = &(*stmt)->next;
+
 		continue;
 
 	drop:
@@ -2306,13 +2307,16 @@ static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, stru
 				if (!reduction2.dereferenced)
 				{
 					/* This variable is not used */
-					printf("%s UNUSED\n",reduction2.id->value.string.str);
+					struct clog_ast_statement_list* next = (*l)->next->next;
+					(*l)->next->next = NULL;
+					clog_ast_statement_list_free(parser,*l);
+					*l = next;
 				}
-
-				l = &(*l)->next;
+				else
+					l = &(*l)->next->next;
 			}
-
-			l = &(*l)->next;
+			else
+				l = &(*l)->next;
 		}
 
 		if (reduction->reduced)
@@ -2327,8 +2331,7 @@ static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, stru
 	while (reduction->reduced);
 
 	/* Check for blocks in block */
-	if (*block)
-		clog_ast_statement_list_flatten(parser,block);
+	clog_ast_statement_list_flatten(parser,block);
 
 	printf("DONE\n\n");
 
@@ -2351,7 +2354,8 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 		return 0;
 	if (if_lit)
 	{
-		struct clog_ast_statement_list* l1;
+		struct clog_ast_statement_list* next = (*if_stmt)->next;
+
 		struct clog_ast_statement_list* l2;
 		if (clog_ast_literal_bool_cast(if_lit))
 		{
@@ -2364,11 +2368,11 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 			(*if_stmt)->stmt->stmt.if_stmt->false_stmt = NULL;
 		}
 
-		l1 = (*if_stmt);
-		*if_stmt = clog_ast_statement_list_append(parser,l2,(*if_stmt)->next);
+		(*if_stmt)->next = NULL;
+		clog_ast_statement_list_free(parser,*if_stmt);
 
-		l1->next = NULL;
-		clog_ast_statement_list_free(parser,l1);
+		*if_stmt = clog_ast_statement_list_append(parser,l2,next);
+
 		reduction->reduced = 1;
 
 		clog_ast_literal_free(parser,if_lit);
@@ -2499,6 +2503,9 @@ static int clog_ast_statement_list_reduce_if(struct clog_parser* parser, struct 
 		reduction->reduced = 1;
 	}
 
+	clog_ast_statement_list_flatten(parser,&(*if_stmt)->stmt->stmt.if_stmt->true_stmt);
+	clog_ast_statement_list_flatten(parser,&(*if_stmt)->stmt->stmt.if_stmt->false_stmt);
+
 	return 1;
 }
 
@@ -2546,14 +2553,15 @@ static int clog_ast_statement_list_reduce_do(struct clog_parser* parser, struct 
 	{
 		if (!clog_ast_literal_bool_cast(if_lit))
 		{
-			/* Replace with loop */
-			struct clog_ast_statement_list* l1;
+			/* Replace with loop stmt */
 			struct clog_ast_statement_list* l2 = (*do_stmt)->stmt->stmt.do_stmt->loop_stmt;
+			struct clog_ast_statement_list* next = (*do_stmt)->next;
 
-			l1 = (*do_stmt);
-			*do_stmt = clog_ast_statement_list_append(parser,l2,(*do_stmt)->next);
-			l1->next = NULL;
-			clog_ast_statement_list_free(parser,l1);
+			(*do_stmt)->next = NULL;
+			clog_ast_statement_list_free(parser,*do_stmt);
+
+			*do_stmt = clog_ast_statement_list_append(parser,l2,next);
+
 			reduction->reduced = 1;
 			clog_ast_literal_free(parser,if_lit);
 
@@ -2562,6 +2570,8 @@ static int clog_ast_statement_list_reduce_do(struct clog_parser* parser, struct 
 
 		clog_ast_literal_free(parser,if_lit);
 	}
+
+	clog_ast_statement_list_flatten(parser,&(*do_stmt)->stmt->stmt.do_stmt->loop_stmt);
 
 	return 1;
 }
@@ -2967,8 +2977,13 @@ int clog_ast_statement_list_alloc_for(struct clog_parser* parser, struct clog_as
 		/* Add init_expression at the same scope as any declarations from cond_stmt */
 		if (*list && (*list)->stmt->type == clog_ast_statement_block)
 			(*list)->stmt->stmt.block = clog_ast_statement_list_append(parser,init_stmt,(*list)->stmt->stmt.block);
-		else if (!clog_ast_statement_list_alloc_block(parser,list,clog_ast_statement_list_append(parser,init_stmt,*list)))
-			return 0;
+		else
+		{
+			*list = clog_ast_statement_list_append(parser,init_stmt,*list);
+
+			if (!clog_ast_statement_list_alloc_block(parser,list,*list))
+				return 0;
+		}
 	}
 
 	return 1;
