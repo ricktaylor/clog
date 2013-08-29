@@ -5,8 +5,8 @@
  *      Author: taylorr
  */
 
-#include "ast.h"
-#include "parser.h"
+#include "clog_ast.h"
+#include "clog_parser.h"
 
 #include <string.h>
 #include <stdio.h>

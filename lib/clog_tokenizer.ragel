@@ -4,8 +4,8 @@
 #include <float.h>
 #include <math.h>
 
-#include <lib/ast.h>
-#include <lib/parser.h>
+#include <lib/clog_ast.h>
+#include <lib/clog_parser.h>
 
 void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_parser* parser);
 

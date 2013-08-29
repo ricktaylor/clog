@@ -4,5 +4,5 @@
 /autoheader_dummy.h.in
 /configure
 /Makefile.in
-/lib/parser.c
-/lib/parser.h
+/lib/clog_parser.c
+/lib/clog_parser.h

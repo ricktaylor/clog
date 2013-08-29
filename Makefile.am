@@ -10,22 +10,22 @@ ACLOCAL_AMFLAGS = -I m4
 .lemon.c:
 	$(AM_V_GEN)$(LEMON) -q $<
 	
-@srcdir@/lib/parser.h: @srcdir@/lib/parser.c
+@srcdir@/lib/clog_parser.h: @srcdir@/lib/clog_parser.c
 	
 BUILT_SOURCES = \
-	@srcdir@/lib/parser.h \
-	@srcdir@/lib/parser.c
+	@srcdir@/lib/clog_parser.h \
+	@srcdir@/lib/clog_parser.c
 	
 CLEANFILES = \
 	$(BUILT_SOURCES) \
-	lib/tokenizer.c
+	lib/clog_tokenizer.c
 		
 bin_PROGRAMS = clog
 
 clog_SOURCES = \
-	lib/parser.lemon \
-	lib/tokenizer.ragel \
-	lib/ast.c \
+	lib/clog_parser.lemon \
+	lib/clog_tokenizer.ragel \
+	lib/clog_ast.c \
 	bin/clog.c
 
 ####################################
