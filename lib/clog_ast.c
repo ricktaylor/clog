@@ -2049,6 +2049,16 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 					}
 					break;
 
+				case CLOG_TOKEN_DOUBLE_PLUS:
+				case CLOG_TOKEN_DOUBLE_MINUS:
+					if (!(*stmt)->stmt->stmt.expression->lvalue)
+					{
+						/* Rewrite v++ => ++v */
+						(*stmt)->stmt->stmt.expression->lvalue = 1;
+						reduction->reduced = 1;
+					}
+					break;
+
 				case CLOG_TOKEN_LESS_THAN:
 				case CLOG_TOKEN_GREATER_THAN:
 				case CLOG_TOKEN_LESS_THAN_EQUALS:
