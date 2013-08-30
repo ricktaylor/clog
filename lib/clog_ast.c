@@ -1955,9 +1955,16 @@ struct clog_ast_expression_list* clog_ast_expression_list_append(struct clog_par
 
 static int clog_ast_expression_list_reduce(struct clog_parser* parser, struct clog_ast_expression_list* list, struct clog_ast_reduction* reduction)
 {
-	for (;list && !reduction->reduced;list = list->next)
+	for (;list;list = list->next)
 	{
-		if (!clog_ast_expression_reduce(parser,&list->expr,reduction))
+		if (list->expr->type == clog_ast_expression_identifier)
+		{
+			list->expr->constant = 0;
+
+			if (clog_ast_literal_id_compare(reduction->id,list->expr->expr.identifier) == 0)
+				reduction->dereferenced = 1;
+		}
+		else if (!clog_ast_expression_reduce(parser,&list->expr,reduction))
 			return 0;
 	}
 	return 1;
