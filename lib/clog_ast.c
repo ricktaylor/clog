@@ -183,6 +183,8 @@ static int clog_token_printf(unsigned int token_id, struct clog_token* token)
 		return printf("<=");
 	case CLOG_TOKEN_GREATER_THAN_EQUALS:
 		return printf(">=");
+	case CLOG_TOKEN_IN:
+		return printf("in");
 	case CLOG_TOKEN_LEFT_SHIFT:
 		return printf("<<");
 	case CLOG_TOKEN_RIGHT_SHIFT:
@@ -1102,6 +1104,14 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			return 0;
 		if (!(*expr)->expr.builtin->args[0]->lvalue)
 			return clog_syntax_error_token(parser,NULL," requires an lvalue",(*expr)->expr.builtin->type,NULL,clog_ast_expression_line((*expr)->expr.builtin->args[0]));
+		return 1;
+
+	case CLOG_TOKEN_IN:
+		if (!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[0],reduction) ||
+				!clog_ast_expression_reduce(parser,&(*expr)->expr.builtin->args[1],reduction))
+		{
+			return 0;
+		}
 		return 1;
 
 	case CLOG_TOKEN_OPEN_BRACKET:
@@ -2064,6 +2074,7 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 				case CLOG_TOKEN_GREATER_THAN:
 				case CLOG_TOKEN_LESS_THAN_EQUALS:
 				case CLOG_TOKEN_GREATER_THAN_EQUALS:
+				case CLOG_TOKEN_IN:
 				case CLOG_TOKEN_EQUALS:
 				case CLOG_TOKEN_NOT_EQUALS:
 				case CLOG_TOKEN_AMPERSAND:

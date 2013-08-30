@@ -177,7 +177,7 @@ relational_expression(A) ::= relational_expression(B) LESS_THAN shift_expression
 relational_expression(A) ::= relational_expression(B) GREATER_THAN shift_expression(C).        { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_GREATER_THAN,B,C); }
 relational_expression(A) ::= relational_expression(B) LESS_THAN_EQUALS shift_expression(C).    { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_LESS_THAN_EQUALS,B,C); }
 relational_expression(A) ::= relational_expression(B) GREATER_THAN_EQUALS shift_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_GREATER_THAN_EQUALS,B,C); }
-/* in expression here */
+relational_expression(A) ::= relational_expression(B) IN shift_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_IN,B,C); }
 
 %type shift_expression                                { struct clog_ast_expression* }
 %destructor shift_expression                          { clog_ast_expression_free(parser,$$); }

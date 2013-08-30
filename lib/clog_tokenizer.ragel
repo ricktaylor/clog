@@ -126,6 +126,7 @@ void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_pars
 		'break'    => { push_token(parser,lemon,CLOG_TOKEN_BREAK); };
 		'continue' => { push_token(parser,lemon,CLOG_TOKEN_CONTINUE); };
 		'return'   => { push_token(parser,lemon,CLOG_TOKEN_RETURN); };
+		'in'       => { push_token(parser,lemon,CLOG_TOKEN_IN); };
 			
 		
 #		'function' => { push_token(parser,lemon,CLOG_TOKEN_FUNCTION); };
