@@ -110,21 +110,22 @@ void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_pars
 		'!' => { push_token(parser,lemon,CLOG_TOKEN_EXCLAMATION); };
 		'~' => { push_token(parser,lemon,CLOG_TOKEN_TILDA); };
 		
-		'if'    => { push_token(parser,lemon,CLOG_TOKEN_IF); };
-		'else'  => { push_token(parser,lemon,CLOG_TOKEN_ELSE); };
-		'while' => { push_token(parser,lemon,CLOG_TOKEN_WHILE); };
-		'do'    => { push_token(parser,lemon,CLOG_TOKEN_DO); };
-		'for'   => { push_token(parser,lemon,CLOG_TOKEN_FOR); };
-		'var'   => { push_token(parser,lemon,CLOG_TOKEN_VAR); };
-		'throw' => { push_token(parser,lemon,CLOG_TOKEN_THROW); };
-		'try'   => { push_token(parser,lemon,CLOG_TOKEN_TRY); };
-		'catch' => { push_token(parser,lemon,CLOG_TOKEN_CATCH); };
-		'null' => { push_token(parser,lemon,CLOG_TOKEN_NULL); };
-		'true' => { push_token(parser,lemon,CLOG_TOKEN_TRUE); };
-		'false' => { push_token(parser,lemon,CLOG_TOKEN_FALSE); };
-		'break' => { push_token(parser,lemon,CLOG_TOKEN_BREAK); };
+		'if'       => { push_token(parser,lemon,CLOG_TOKEN_IF); };
+		'else'     => { push_token(parser,lemon,CLOG_TOKEN_ELSE); };
+		'while'    => { push_token(parser,lemon,CLOG_TOKEN_WHILE); };
+		'do'       => { push_token(parser,lemon,CLOG_TOKEN_DO); };
+		'for'      => { push_token(parser,lemon,CLOG_TOKEN_FOR); };
+		'var'      => { push_token(parser,lemon,CLOG_TOKEN_VAR); };
+		'const'    => { push_token(parser,lemon,CLOG_TOKEN_CONST); };
+		'throw'    => { push_token(parser,lemon,CLOG_TOKEN_THROW); };
+		'try'      => { push_token(parser,lemon,CLOG_TOKEN_TRY); };
+		'catch'    => { push_token(parser,lemon,CLOG_TOKEN_CATCH); };
+		'null'     => { push_token(parser,lemon,CLOG_TOKEN_NULL); };
+		'true'     => { push_token(parser,lemon,CLOG_TOKEN_TRUE); };
+		'false'    => { push_token(parser,lemon,CLOG_TOKEN_FALSE); };
+		'break'    => { push_token(parser,lemon,CLOG_TOKEN_BREAK); };
 		'continue' => { push_token(parser,lemon,CLOG_TOKEN_CONTINUE); };
-		'return' => { push_token(parser,lemon,CLOG_TOKEN_RETURN); };
+		'return'   => { push_token(parser,lemon,CLOG_TOKEN_RETURN); };
 			
 		
 #		'function' => { push_token(parser,lemon,CLOG_TOKEN_FUNCTION); };

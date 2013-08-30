@@ -65,6 +65,7 @@ for_init_statement(A) ::= variable_declaration(B). { A = B; }
 
 condition(A) ::= expression(B).       { clog_ast_statement_list_alloc_expression(parser,&A,B); }
 condition(A) ::= VAR ID(B) ASSIGN initializer(C). { clog_ast_statement_list_alloc_declaration(parser,&A,B,C); }
+condition(A) ::= CONST ID(B) ASSIGN initializer(C). { clog_ast_statement_list_alloc_declaration(parser,&A,B,C); A->stmt->type = clog_ast_statement_constant; }
 
 expression_statement(A) ::= expression(B) SEMI_COLON. { clog_ast_statement_list_alloc_expression(parser,&A,B); }
 expression_statement(A) ::= SEMI_COLON.               { A = NULL; }
@@ -89,6 +90,7 @@ jump_statement(A) ::= RETURN expression(B) SEMI_COLON. { clog_ast_statement_list
 declaration_statement(A) ::= variable_declaration(B). { A = B; }
 
 variable_declaration(A) ::= VAR init_declarator_list(B) SEMI_COLON. { A = B; }
+variable_declaration(A) ::= CONST init_declarator_list(B) SEMI_COLON. { A = B; A->stmt->type = clog_ast_statement_constant; }
 
 init_declarator_list(A) ::= init_declarator(B).  { A = B; }
 init_declarator_list(A) ::= init_declarator_list(B) COMMA init_declarator(C). { A = clog_ast_statement_list_append(parser,B,C); }
@@ -103,7 +105,7 @@ initializer(A) ::= assignment_expression(B). { A = B; }
 %type expression_list              { struct clog_ast_expression_list* }
 %destructor expression_list        { clog_ast_expression_list_free(parser,$$); }
 expression_list(A) ::= assignment_expression(B).                          { clog_ast_expression_list_alloc(parser,&A,B); }
-expression_list(A) ::= expression_list(B) COMMA assignment_expression(C). { A = clog_ast_expression_list_append(parser,B,C); }
+expression_list(A) ::= expression_list(B) COMMA assignment_expression(C). { clog_ast_expression_list_append(parser,&B,C); A = B; }
 
 %type expression                            { struct clog_ast_expression* }
 %destructor expression                      { clog_ast_expression_free(parser,$$); }
@@ -175,6 +177,7 @@ relational_expression(A) ::= relational_expression(B) LESS_THAN shift_expression
 relational_expression(A) ::= relational_expression(B) GREATER_THAN shift_expression(C).        { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_GREATER_THAN,B,C); }
 relational_expression(A) ::= relational_expression(B) LESS_THAN_EQUALS shift_expression(C).    { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_LESS_THAN_EQUALS,B,C); }
 relational_expression(A) ::= relational_expression(B) GREATER_THAN_EQUALS shift_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_GREATER_THAN_EQUALS,B,C); }
+/* in expression here */
 
 %type shift_expression                                { struct clog_ast_expression* }
 %destructor shift_expression                          { clog_ast_expression_free(parser,$$); }

@@ -132,7 +132,7 @@ struct clog_ast_expression_list
 
 void clog_ast_expression_list_free(struct clog_parser* parser, struct clog_ast_expression_list* list);
 int clog_ast_expression_list_alloc(struct clog_parser* parser, struct clog_ast_expression_list** list, struct clog_ast_expression* expr);
-struct clog_ast_expression_list* clog_ast_expression_list_append(struct clog_parser* parser, struct clog_ast_expression_list* list, struct clog_ast_expression* expr);
+int clog_ast_expression_list_append(struct clog_parser* parser, struct clog_ast_expression_list** list, struct clog_ast_expression* expr);
 
 struct clog_ast_statement
 {
@@ -141,6 +141,7 @@ struct clog_ast_statement
 		clog_ast_statement_expression,
 		clog_ast_statement_block,
 		clog_ast_statement_declaration,
+		clog_ast_statement_constant,
 		clog_ast_statement_if,
 		clog_ast_statement_do,
 		clog_ast_statement_break,
