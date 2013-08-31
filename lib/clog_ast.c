@@ -913,6 +913,10 @@ static int clog_ast_expression_eval(struct clog_parser* parser, struct clog_ast_
 			switch (expr->expr.builtin->type)
 			{
 			case CLOG_TOKEN_ASSIGN:
+				if (clog_ast_literal_id_compare(reduction->id,expr->expr.identifier) == 0)
+					return clog_ast_expression_eval(parser,v,expr->expr.builtin->args[1],reduction);
+				break;
+
 			case CLOG_TOKEN_COMMA:
 				return clog_ast_expression_eval(parser,v,expr->expr.builtin->args[1],reduction);
 
