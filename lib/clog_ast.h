@@ -5,8 +5,8 @@
  *      Author: taylorr
  */
 
-#ifndef AST_H_
-#define AST_H_
+#ifndef CLOG_AST_H_
+#define CLOG_AST_H_
 
 #include <stddef.h>
 
@@ -196,4 +196,4 @@ struct clog_parser
 	struct clog_ast_statement_list* pgm;
 };
 
-#endif /* AST_H_ */
+#endif /* CLOG_AST_H_ */
