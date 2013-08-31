@@ -242,11 +242,6 @@ string(A) ::= string(B) STRING(C). { A = clog_ast_literal_append_string(parser,B
 
 
 
-/*
-%type constant_expression                             { struct clog_ast_expression* }
-%destructor constant_expression                       { clog_ast_expression_free(parser,$$); }
-constant_expression(A) ::= conditional_expression(B). { A = B; }
-*/
 
 
 /*
