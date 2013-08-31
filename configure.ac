@@ -1,7 +1,7 @@
 AC_PREREQ(2.61)
 
 AC_INIT(clog,0.0.1)
-AC_CONFIG_SRCDIR([lib/tokenizer.ragel])
+AC_CONFIG_SRCDIR([lib/clog_tokenizer.ragel])
 AC_CONFIG_HEADERS([autoheader_dummy.h])
 
 AC_CONFIG_AUX_DIR([build-aux])
