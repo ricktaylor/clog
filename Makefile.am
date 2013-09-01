@@ -26,6 +26,7 @@ clog_SOURCES = \
 	lib/clog_parser.lemon \
 	lib/clog_tokenizer.ragel \
 	lib/clog_ast.c \
+	lib/clog_dispatch.c \
 	bin/clog.c
 
 ####################################
