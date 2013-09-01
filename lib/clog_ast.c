@@ -758,22 +758,10 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 	switch (type)
 	{
 	case CLOG_TOKEN_GREATER_THAN:
-		{
-			struct clog_ast_expression* e;
-			if (!clog_ast_expression_alloc_builtin2(parser,&e,CLOG_TOKEN_LESS_THAN_EQUALS,p1,p2))
-				return 0;
-
-			return clog_ast_expression_alloc_builtin1(parser,expr,CLOG_TOKEN_EXCLAMATION,e);
-		}
+		return clog_ast_expression_alloc_builtin3(parser,expr,CLOG_TOKEN_LESS_THAN_EQUALS,p2,p1,NULL);
 
 	case CLOG_TOKEN_GREATER_THAN_EQUALS:
-		{
-			struct clog_ast_expression* e;
-			if (!clog_ast_expression_alloc_builtin2(parser,&e,CLOG_TOKEN_LESS_THAN,p1,p2))
-				return 0;
-
-			return clog_ast_expression_alloc_builtin1(parser,expr,CLOG_TOKEN_EXCLAMATION,e);
-		}
+		return clog_ast_expression_alloc_builtin3(parser,expr,CLOG_TOKEN_LESS_THAN,p2,p1,NULL);
 
 	case CLOG_TOKEN_NOT_EQUALS:
 		{
