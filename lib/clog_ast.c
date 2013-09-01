@@ -1298,15 +1298,48 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			p1->value.integer = (p1->value.integer == 0 ? 1 : 0);
 			goto replace_with_p1;
 		}
-		if ((*expr)->expr.builtin->args[0]->type == clog_ast_expression_builtin &&
-				(*expr)->expr.builtin->args[0]->expr.builtin->type == CLOG_TOKEN_EXCLAMATION)
+		if ((*expr)->expr.builtin->args[0]->type == clog_ast_expression_builtin)
 		{
-			/* Remove any double negate */
-			struct clog_ast_expression* e = (*expr)->expr.builtin->args[0]->expr.builtin->args[0];
-			(*expr)->expr.builtin->args[0]->expr.builtin->args[0] = NULL;
-			clog_ast_expression_free(parser,*expr);
-			*expr = e;
-			reduction->reduced = 1;
+			struct clog_ast_expression* e;
+			switch ((*expr)->expr.builtin->args[0]->expr.builtin->type)
+			{
+			case CLOG_TOKEN_EXCLAMATION:
+				/* Remove any double negate */
+				e = (*expr)->expr.builtin->args[0]->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0]->expr.builtin->args[0] = NULL;
+				clog_ast_expression_free(parser,*expr);
+				*expr = e;
+				reduction->reduced = 1;
+
+			case CLOG_TOKEN_LESS_THAN:
+				/* !(X < Y) => (Y <= X) */
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = NULL;
+				clog_ast_expression_free(parser,*expr);
+				*expr = e;
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = (*expr)->expr.builtin->args[1];
+				(*expr)->expr.builtin->args[1] = e;
+				(*expr)->expr.builtin->type = CLOG_TOKEN_LESS_THAN_EQUALS;
+				reduction->reduced = 1;
+				break;
+
+			case CLOG_TOKEN_LESS_THAN_EQUALS:
+				/* !(X <= Y) => (Y < X) */
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = NULL;
+				clog_ast_expression_free(parser,*expr);
+				*expr = e;
+				e = (*expr)->expr.builtin->args[0];
+				(*expr)->expr.builtin->args[0] = (*expr)->expr.builtin->args[1];
+				(*expr)->expr.builtin->args[1] = e;
+				(*expr)->expr.builtin->type = CLOG_TOKEN_LESS_THAN;
+				reduction->reduced = 1;
+				break;
+
+			default:
+				break;
+			}
 		}
 		break;
 
