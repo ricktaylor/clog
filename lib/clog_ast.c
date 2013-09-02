@@ -2563,6 +2563,7 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 		}
 	}
 
+#if 0
 	/* Now reduce the block */
 	if (!parser->failed)
 	{
@@ -2576,6 +2577,7 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 		if (!block)
 			return 1;
 	}
+#endif
 
 	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_block))
 	{
@@ -3186,7 +3188,7 @@ static void __dump(size_t indent, const struct clog_ast_statement_list* list)
 
 
 
-
+int clog_codegen(const struct clog_ast_statement_list* list);
 
 /* External functions defined by ragel and lemon */
 int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser* parser, void* lemon);
@@ -3212,7 +3214,11 @@ int clog_parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_
 	__dump(0,parser.pgm);
 
 	if (retval && !parser.failed)
+	{
 		printf("Success!\n");
+
+		clog_codegen(parser.pgm);
+	}
 
 	clog_ast_statement_list_free(&parser,parser.pgm);
 

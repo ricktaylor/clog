@@ -12,7 +12,7 @@
 #include <limits.h>
 
 #ifndef UINT32_MAX
-# define UINT32_MAX (0xffffffffUL)
+#define UINT32_MAX (0xffffffffUL)
 #endif
 #ifndef uint32_t
 #if (ULONG_MAX == UINT32_MAX)
@@ -26,9 +26,10 @@
 #endif
 #endif
 
-/* Opcodes are defined by the low bits of the int
- * The following bits are determined by the opcode itself
+/* Instructions are all 32bits
  */
+
+
 enum clog_opcode
 {
 	clog_opcode_NOP = 0,

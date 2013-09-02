@@ -18,15 +18,29 @@
 	case clog_opcode_ARITH: goto ARITH; \
 	}
 
-void run(const uint32_t* code)
+struct clog_vm_string
 {
-	size_t ip = 0;
+	unsigned int refcount;
 
-NOP:
-	DISPATCH();
+};
 
-ARITH:
-	DISPATCH();
+struct clog_vm_value
+{
+
+};
+
+enum clog_vm_value_type
+{
+	clog_vm_value_string,
+	clog_vm_value_integer,
+	clog_vm_value_real,
+	clog_vm_value_pointer,
+};
+
+struct clog_vm_state
+{
+	struct clog_vm_value* accum;
+	enum clog_vm_value_type accum_type;
 
 
-}
+};
