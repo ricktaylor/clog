@@ -755,26 +755,16 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 		return 0;
 	}
 
-	switch (type)
+	if (type == CLOG_TOKEN_NOT_EQUALS)
 	{
-	case CLOG_TOKEN_GREATER_THAN:
-		return clog_ast_expression_alloc_builtin3(parser,expr,CLOG_TOKEN_LESS_THAN_EQUALS,p2,p1,NULL);
+		struct clog_ast_expression* e;
+		if (!clog_ast_expression_alloc_builtin2(parser,&e,CLOG_TOKEN_EQUALS,p1,p2))
+			return 0;
 
-	case CLOG_TOKEN_GREATER_THAN_EQUALS:
-		return clog_ast_expression_alloc_builtin3(parser,expr,CLOG_TOKEN_LESS_THAN,p2,p1,NULL);
-
-	case CLOG_TOKEN_NOT_EQUALS:
-		{
-			struct clog_ast_expression* e;
-			if (!clog_ast_expression_alloc_builtin2(parser,&e,CLOG_TOKEN_EQUALS,p1,p2))
-				return 0;
-
-			return clog_ast_expression_alloc_builtin1(parser,expr,CLOG_TOKEN_EXCLAMATION,e);
-		}
-
-	default:
-		return clog_ast_expression_alloc_builtin3(parser,expr,type,p1,p2,NULL);
+		return clog_ast_expression_alloc_builtin1(parser,expr,CLOG_TOKEN_EXCLAMATION,e);
 	}
+
+	return clog_ast_expression_alloc_builtin3(parser,expr,type,p1,p2,NULL);
 }
 
 int clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2, struct clog_ast_expression* p3)
@@ -1298,48 +1288,15 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			p1->value.integer = (p1->value.integer == 0 ? 1 : 0);
 			goto replace_with_p1;
 		}
-		if ((*expr)->expr.builtin->args[0]->type == clog_ast_expression_builtin)
+		if ((*expr)->expr.builtin->args[0]->type == clog_ast_expression_builtin &&
+				(*expr)->expr.builtin->args[0]->expr.builtin->type == CLOG_TOKEN_EXCLAMATION)
 		{
-			struct clog_ast_expression* e;
-			switch ((*expr)->expr.builtin->args[0]->expr.builtin->type)
-			{
-			case CLOG_TOKEN_EXCLAMATION:
-				/* Remove any double negate */
-				e = (*expr)->expr.builtin->args[0]->expr.builtin->args[0];
-				(*expr)->expr.builtin->args[0]->expr.builtin->args[0] = NULL;
-				clog_ast_expression_free(parser,*expr);
-				*expr = e;
-				reduction->reduced = 1;
-
-			case CLOG_TOKEN_LESS_THAN:
-				/* !(X < Y) => (Y <= X) */
-				e = (*expr)->expr.builtin->args[0];
-				(*expr)->expr.builtin->args[0] = NULL;
-				clog_ast_expression_free(parser,*expr);
-				*expr = e;
-				e = (*expr)->expr.builtin->args[0];
-				(*expr)->expr.builtin->args[0] = (*expr)->expr.builtin->args[1];
-				(*expr)->expr.builtin->args[1] = e;
-				(*expr)->expr.builtin->type = CLOG_TOKEN_LESS_THAN_EQUALS;
-				reduction->reduced = 1;
-				break;
-
-			case CLOG_TOKEN_LESS_THAN_EQUALS:
-				/* !(X <= Y) => (Y < X) */
-				e = (*expr)->expr.builtin->args[0];
-				(*expr)->expr.builtin->args[0] = NULL;
-				clog_ast_expression_free(parser,*expr);
-				*expr = e;
-				e = (*expr)->expr.builtin->args[0];
-				(*expr)->expr.builtin->args[0] = (*expr)->expr.builtin->args[1];
-				(*expr)->expr.builtin->args[1] = e;
-				(*expr)->expr.builtin->type = CLOG_TOKEN_LESS_THAN;
-				reduction->reduced = 1;
-				break;
-
-			default:
-				break;
-			}
+			/* Remove any double negate */
+			struct clog_ast_expression* e = (*expr)->expr.builtin->args[0]->expr.builtin->args[0];
+			(*expr)->expr.builtin->args[0]->expr.builtin->args[0] = NULL;
+			clog_ast_expression_free(parser,*expr);
+			*expr = e;
+			reduction->reduced = 1;
 		}
 		break;
 
@@ -1438,6 +1395,8 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 
 	case CLOG_TOKEN_LESS_THAN:
 	case CLOG_TOKEN_LESS_THAN_EQUALS:
+	case CLOG_TOKEN_GREATER_THAN:
+	case CLOG_TOKEN_GREATER_THAN_EQUALS:
 	case CLOG_TOKEN_EQUALS:
 		if (p1 && p2)
 		{
@@ -1455,6 +1414,14 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 
 			case CLOG_TOKEN_LESS_THAN_EQUALS:
 				p1->value.integer = (b <= 0 ? 1 : 0);
+				break;
+
+			case CLOG_TOKEN_GREATER_THAN:
+				p1->value.integer = (b > 0 ? 1 : 0);
+				break;
+
+			case CLOG_TOKEN_GREATER_THAN_EQUALS:
+				p1->value.integer = (b >= 0 ? 1 : 0);
 				break;
 
 			case CLOG_TOKEN_EQUALS:
@@ -2064,6 +2031,8 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 
 				case CLOG_TOKEN_LESS_THAN:
 				case CLOG_TOKEN_LESS_THAN_EQUALS:
+				case CLOG_TOKEN_GREATER_THAN:
+				case CLOG_TOKEN_GREATER_THAN_EQUALS:
 				case CLOG_TOKEN_IN:
 				case CLOG_TOKEN_EQUALS:
 				case CLOG_TOKEN_AMPERSAND:
