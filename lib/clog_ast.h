@@ -190,6 +190,7 @@ int clog_ast_statement_list_alloc(struct clog_parser* parser, struct clog_ast_st
 
 struct clog_parser
 {
+	int           reduce;
 	int           failed;
 	unsigned long line;
 

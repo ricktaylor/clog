@@ -2200,9 +2200,6 @@ static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, stru
 	int reduced = reduction->reduced;
 	int referenced = reduction->referenced;
 
-	printf("WAS:\n");
-	__dump(1,*block);
-
 	do
 	{
 		reduction->reduced = 0;
@@ -2272,16 +2269,11 @@ static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, stru
 
 		if (reduction->referenced)
 			referenced = 1;
-
-		printf("NOW:\n");
-			__dump(1,*block);
 	}
 	while (reduction->reduced);
 
 	/* Check for blocks in block */
 	clog_ast_statement_list_flatten(parser,block);
-
-	printf("DONE\n\n");
 
 	reduction->reduced = reduced;
 	reduction->referenced = referenced;
@@ -2563,9 +2555,8 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 		}
 	}
 
-#if 0
 	/* Now reduce the block */
-	if (!parser->failed)
+	if (!parser->failed && parser->reduce)
 	{
 		struct clog_ast_reduction reduction = {0};
 		if (!clog_ast_statement_list_reduce_block(parser,&block,&reduction))
@@ -2577,7 +2568,6 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 		if (!block)
 			return 1;
 	}
-#endif
 
 	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_block))
 	{
@@ -3199,7 +3189,10 @@ void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_pars
 int clog_parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param)
 {
 	int retval = 0;
-	struct clog_parser parser = {0,1};
+	struct clog_parser parser = {0};
+
+	parser.line = 1;
+	parser.reduce = 0;
 
 	void* lemon = clog_parserAlloc(&clog_malloc);
 	if (!lemon)
