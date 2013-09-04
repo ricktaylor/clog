@@ -86,7 +86,6 @@ struct clog_ast_expression
 		clog_ast_expression_literal,
 		clog_ast_expression_builtin,
 		clog_ast_expression_call,
-
 	} type;
 
 	int lvalue;

@@ -865,7 +865,7 @@ int clog_ast_expression_alloc_call(struct clog_parser* parser, struct clog_ast_e
 	}
 
 	(*expr)->type = clog_ast_expression_call;
-	(*expr)->lvalue = 1;
+	(*expr)->lvalue = call->lvalue;
 	(*expr)->constant = 0;
 	(*expr)->expr.call = clog_malloc(sizeof(struct clog_ast_expression_call));
 	if (!(*expr)->expr.call)
@@ -1050,7 +1050,9 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			/* Rewrite postfix e++ => (++e,value) */
 			if (!clog_ast_literal_clone(parser,&p1,reduction->value) || !clog_ast_expression_alloc_literal(parser,&e,p1))
 				return 0;
+
 			(*expr)->lvalue = 1;
+
 			reduction->reduced = 1;
 			return clog_ast_expression_alloc_builtin2(parser,expr,CLOG_TOKEN_COMMA,*expr,e);
 		}
@@ -1183,7 +1185,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			p2 = p1;
 			p1 = p;
 		}
-
 		if (p1)
 		{
 			if (!p2)
