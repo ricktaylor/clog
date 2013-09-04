@@ -96,7 +96,7 @@ void clog_parser(void* lemon, int type, struct clog_token* tok, struct clog_pars
 		'>>=' => { push_token(parser,lemon,CLOG_TOKEN_RIGHT_SHIFT_ASSIGN); };
 		'<<=' => { push_token(parser,lemon,CLOG_TOKEN_LEFT_SHIFT_ASSIGN); };
 		'&=' => { push_token(parser,lemon,CLOG_TOKEN_AMPERSAND_ASSIGN); };
-		'^=' => { push_token(parser,lemon,CLOG_TOKEN_BITWISE_CARET_ASSIGN); };
+		'^=' => { push_token(parser,lemon,CLOG_TOKEN_CARET_ASSIGN); };
 		'|=' => { push_token(parser,lemon,CLOG_TOKEN_BAR_ASSIGN); };
 		'<<' => { push_token(parser,lemon,CLOG_TOKEN_LEFT_SHIFT); };
 		'>>' => { push_token(parser,lemon,CLOG_TOKEN_RIGHT_SHIFT); };

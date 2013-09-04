@@ -126,7 +126,7 @@ assignment_expression(A) ::= logical_OR_expression(B) MINUS_ASSIGN assignment_ex
 assignment_expression(A) ::= logical_OR_expression(B) RIGHT_SHIFT_ASSIGN assignment_expression(C).   { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_RIGHT_SHIFT_ASSIGN,B,C); }
 assignment_expression(A) ::= logical_OR_expression(B) LEFT_SHIFT_ASSIGN assignment_expression(C).    { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_LEFT_SHIFT_ASSIGN,B,C); }
 assignment_expression(A) ::= logical_OR_expression(B) AMPERSAND_ASSIGN assignment_expression(C).     { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_AMPERSAND_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) BITWISE_CARET_ASSIGN assignment_expression(C). { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_BITWISE_CARET_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) CARET_ASSIGN assignment_expression(C). { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_CARET_ASSIGN,B,C); }
 assignment_expression(A) ::= logical_OR_expression(B) BAR_ASSIGN assignment_expression(C).           { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_BAR_ASSIGN,B,C); } 
 
 %type throw_expression                                  { struct clog_ast_expression* }
