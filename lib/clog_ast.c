@@ -271,6 +271,7 @@ static int clog_ast_literal_clone(struct clog_parser* parser, struct clog_ast_li
 
 	case clog_ast_literal_string:
 		(*new)->value.string.len = lit->value.string.len;
+		(*new)->value.string.str = NULL;
 		if ((*new)->value.string.len)
 		{
 			(*new)->value.string.str = clog_malloc((*new)->value.string.len+1);
@@ -440,7 +441,7 @@ static int clog_ast_literal_arith_convert(struct clog_ast_literal* lit1, struct 
 	return 0;
 }
 
-static int clog_ast_literal_compare(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2)
+int clog_ast_literal_compare(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2)
 {
 	if (lit1 && lit2)
 	{

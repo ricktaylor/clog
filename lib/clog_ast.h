@@ -75,6 +75,7 @@ void clog_ast_literal_free(struct clog_parser* parser, struct clog_ast_literal* 
 int clog_ast_literal_alloc(struct clog_parser* parser, struct clog_ast_literal** lit, struct clog_token* token);
 int clog_ast_literal_alloc_bool(struct clog_parser* parser, struct clog_ast_literal** lit, int value);
 struct clog_ast_literal* clog_ast_literal_append_string(struct clog_parser* parser, struct clog_ast_literal* lit, struct clog_token* token);
+int clog_ast_literal_compare(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2);
 
 struct clog_ast_expression_list;
 
