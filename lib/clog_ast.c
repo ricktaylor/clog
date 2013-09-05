@@ -716,18 +716,15 @@ int clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_ex
 
 int clog_ast_expression_alloc_builtin_lvalue(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
 {
-	switch (type)
+	if (type == CLOG_TOKEN_OPEN_BRACKET)
 	{
-	case CLOG_TOKEN_DOUBLE_PLUS:
-	case CLOG_TOKEN_DOUBLE_MINUS:
-		if (!clog_ast_expression_alloc_builtin1(parser,expr,type,p1))
-			return 0;
-		break;
-
-	default:
 		if (!clog_ast_expression_alloc_builtin2(parser,expr,type,p1,p2))
 			return 0;
-		break;
+	}
+	else
+	{
+		if (!clog_ast_expression_alloc_builtin1(parser,expr,type,p1))
+			return 0;
 	}
 
 	(*expr)->lvalue = 1;
