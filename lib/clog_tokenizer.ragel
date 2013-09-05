@@ -229,7 +229,7 @@ static int push_string(struct clog_parser* parser, void* lemon, const unsigned c
 	{
 		str = clog_malloc(len+1);
 		if (!str)
-			return clog_out_of_memory(parser);
+			return clog_ast_out_of_memory(parser);
 			
 		for (i=0,j=0; i < len; ++i)
 		{
@@ -285,7 +285,7 @@ static int push_string(struct clog_parser* parser, void* lemon, const unsigned c
 	if (!tok)
 	{
 		clog_free(str);
-		return clog_out_of_memory(parser);
+		return clog_ast_out_of_memory(parser);
 	}
 	
 	tok->type = clog_token_string;
@@ -312,7 +312,7 @@ static int push_int(struct clog_parser* parser, void* lemon, long v)
 {
 	struct clog_token* tok = clog_malloc(sizeof(*tok));
 	if (!tok)
-		return clog_out_of_memory(parser); 
+		return clog_ast_out_of_memory(parser); 
 		
 	tok->type = clog_token_integer;
 	tok->value.integer = v;
@@ -439,7 +439,7 @@ static int push_float(struct clog_parser* parser, void* lemon, const unsigned ch
 	
 	tok = clog_malloc(sizeof(*tok));
 	if (!tok)
-		return clog_out_of_memory(parser); 
+		return clog_ast_out_of_memory(parser); 
 		
 	tok->type = clog_token_real;
 	tok->value.real = d;
@@ -465,7 +465,7 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 		
 	buffer = clog_malloc(buffer_size);
 	if (!buffer)
-		clog_out_of_memory(parser);
+		clog_ast_out_of_memory(parser);
 	else
 	{
 		for (p = buffer;;)
@@ -509,7 +509,7 @@ int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* 
 					unsigned char* new_buffer = clog_realloc(buffer,buffer_size * 2);
 					if (!new_buffer)
 					{
-						clog_out_of_memory(parser);
+						clog_ast_out_of_memory(parser);
 						break;
 					}
 						

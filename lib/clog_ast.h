@@ -17,7 +17,7 @@ void clog_free(void* p);
 struct clog_parser;
 struct clog_ast_statement_list;
 
-int clog_out_of_memory(struct clog_parser* parser);
+int clog_ast_out_of_memory(struct clog_parser* parser);
 int clog_syntax_error(struct clog_parser* parser, const char* msg, unsigned long line);
 
 /* Simple string */
