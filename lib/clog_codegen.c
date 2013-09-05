@@ -7,264 +7,264 @@
 
 #include "clog_ast.h"
 #include "clog_parser.h"
+#include "clog_opcodes.h"
 
+#include <string.h>
 #include <stdio.h>
 
 int clog_codegen(const struct clog_ast_statement_list* list);
 
-static int clog_codegen_emit(const char* opcode)
-{
-	printf("%s\n",opcode);
+struct clog_cg_triplet;
 
+struct clog_cg_register
+{
+	struct clog_cg_triplet* prev_use;
+	unsigned int refcount;
+};
+
+struct clog_cg_block;
+
+struct clog_cg_triplet
+{
+	enum clog_opcode op;
+
+	union clog_cg_triplet_u0
+	{
+		struct clog_cg_triplet_expr
+		{
+			struct clog_cg_register result;
+			union clog_cg_triplet_u1
+			{
+				struct clog_cg_register* reg;
+				struct clog_ast_literal* lit;
+			} args[2];
+		} expr;
+		struct clog_cg_block* jmp;
+		struct clog_cg_triplet_phi
+		{
+			struct clog_cg_register* regs[2];
+		} phi;
+	} val;
+};
+
+struct clog_cg_block_register
+{
+	struct clog_ast_literal* id;
+	struct clog_cg_triplet* last_use;
+};
+
+struct clog_cg_block
+{
+	struct clog_cg_block* next;
+	struct clog_cg_block* prev;
+
+	struct clog_cg_triplet** triplets;
+	unsigned int triplet_count;
+	unsigned int triplet_alloc;
+
+	struct clog_cg_block_register* registers;
+	unsigned int register_count;
+	unsigned int register_alloc;
+
+	unsigned int temp_counter;
+};
+
+static int clog_cg_out_of_memory()
+{
+	printf("Out of memory during code generation\n");
+	return 0;
+}
+
+static int clog_cg_alloc_triplet(struct clog_cg_block* block, struct clog_cg_triplet** triplet)
+{
+	if (block->triplet_count == block->triplet_alloc)
+	{
+		/* Resize array */
+		struct clog_cg_triplet** new = clog_realloc(block->triplets,block->triplet_alloc * 2 * sizeof(struct clog_cg_triplet*));
+		if (!new)
+			return clog_cg_out_of_memory();
+
+		block->triplet_alloc *= 2;
+		block->triplets = new;
+	}
+
+	*triplet = block->triplets[block->triplet_count++];
 	return 1;
 }
 
-static int clog_codegen_expression_builtin(const struct clog_ast_expression_builtin* builtin);
-
-static int clog_codegen_loadA(const struct clog_ast_expression* expr)
+static void clog_cg_free_triplet(struct clog_cg_block* block, struct clog_cg_triplet* triplet)
 {
-	if (!expr)
-		return 1;
-
-	switch (expr->type)
+	unsigned int i = block->triplet_count;
+	while (i-- > 0)
 	{
-	case clog_ast_expression_identifier:
-		printf("LOADA (%s)\n",expr->expr.identifier->value.string.str);
-		return 1;
-
-	case clog_ast_expression_literal:
-		switch (expr->expr.literal->type)
+		if (triplet == block->triplets[i])
 		{
-		case clog_ast_literal_string:
-			printf("LOADA string: %s\n",expr->expr.literal->value.string.str);
-			break;
-
-		case clog_ast_literal_null:
-		case clog_ast_literal_bool:
-		case clog_ast_literal_integer:
-			printf("LOADA int: %ld\n",expr->expr.literal->value.integer);
-			break;
-
-		case clog_ast_literal_real:
-			printf("LOADA real: %g\n",expr->expr.literal->value.real);
+			--block->triplet_count;
+			if (i < block->triplet_count)
+				memmove(&block->triplets[i],&block->triplets[i+1],(block->triplet_count - i) * sizeof(struct clog_cg_triplet*));
 			break;
 		}
-		return 1;
-
-	case clog_ast_expression_builtin:
-		return clog_codegen_expression_builtin(expr->expr.builtin);
-
-	case clog_ast_expression_call:
-		break;
 	}
-
-	return 1;
 }
 
-static int clog_codegen_loadX(const struct clog_ast_expression* expr)
+static struct clog_cg_block_register* clog_cg_alloc_register(struct clog_cg_block* block, struct clog_ast_literal** id)
 {
-	if (!expr)
-		return 1;
-
-	switch (expr->type)
+	if (block->register_count == block->register_alloc)
 	{
-	case clog_ast_expression_identifier:
-		printf("LOADX (%s)\n",expr->expr.identifier->value.string.str);
-		return 1;
-
-	case clog_ast_expression_literal:
-		switch (expr->expr.literal->type)
+		/* Resize array */
+		struct clog_cg_block_register* new = clog_realloc(block->registers,block->register_alloc * 2 * sizeof(struct clog_cg_block_register));
+		if (!new)
 		{
-		case clog_ast_literal_string:
-			printf("LOADX string: %s\n",expr->expr.literal->value.string.str);
-			break;
-
-		case clog_ast_literal_null:
-		case clog_ast_literal_bool:
-		case clog_ast_literal_integer:
-			printf("LOADX int: %ld\n",expr->expr.literal->value.integer);
-			break;
-
-		case clog_ast_literal_real:
-			printf("LOADX real: %g\n",expr->expr.literal->value.real);
-			break;
+			clog_cg_out_of_memory();
+			return NULL;
 		}
-		return 1;
 
-	case clog_ast_expression_builtin:
-		return (clog_codegen_expression_builtin(expr->expr.builtin) &&
-				clog_codegen_emit("TAX"));
-
-	case clog_ast_expression_call:
-		return (clog_codegen_expression_builtin(expr->expr.builtin) &&
-				clog_codegen_emit("TAX"));
-		break;
+		block->register_alloc *= 2;
+		block->registers = new;
 	}
 
-	return 1;
+	block->registers[block->register_count].last_use = NULL;
+	block->registers[block->register_count].id = *id;
+	*id = NULL;
+
+	return &block->registers[block->register_count++];
 }
 
-static int clog_codegen_expression_builtin(const struct clog_ast_expression_builtin* builtin)
+static struct clog_cg_block_register* clog_cg_alloc_temp_register(struct clog_cg_block* block)
 {
-	if (!builtin)
-		return 1;
+	struct clog_cg_block_register* retval;
+	struct clog_ast_literal* lit;
+	char szBuf[sizeof(block->temp_counter) * 2 + 2] = {0};
+	sprintf(szBuf,"$%x",block->temp_counter);
 
-	switch (builtin->type)
+	lit = clog_malloc(sizeof(struct clog_ast_literal));
+	if (!lit)
 	{
-	case CLOG_TOKEN_ASSIGN:
-		return (clog_codegen_loadA(builtin->args[1]) &&
-				clog_codegen_loadA(builtin->args[0]) &&
-				clog_codegen_emit("*A = X"));
-
-	case CLOG_TOKEN_COMMA:
-		return printf(",");
-	case CLOG_TOKEN_STAR_ASSIGN:
-		return printf("*=");
-	case CLOG_TOKEN_SLASH_ASSIGN:
-		return printf("/=");
-	case CLOG_TOKEN_PERCENT_ASSIGN:
-		return printf("%%=");
-	case CLOG_TOKEN_PLUS_ASSIGN:
-		return printf("+=");
-	case CLOG_TOKEN_MINUS_ASSIGN:
-		return printf("-=");
-	case CLOG_TOKEN_RIGHT_SHIFT_ASSIGN:
-		return printf(">>=");
-	case CLOG_TOKEN_LEFT_SHIFT_ASSIGN:
-		return printf("<<=");
-	case CLOG_TOKEN_AMPERSAND_ASSIGN:
-		return printf("&=");
-	case CLOG_TOKEN_BITWISE_CARET_ASSIGN:
-		return printf("^=");
-	case CLOG_TOKEN_BAR_ASSIGN:
-		return printf("|=");
-	case CLOG_TOKEN_THROW:
-		return printf("throw");
-	case CLOG_TOKEN_QUESTION:
-		return printf("?");
-	case CLOG_TOKEN_COLON:
-		return printf(":");
-	case CLOG_TOKEN_OR:
-		return printf("||");
-	case CLOG_TOKEN_AND:
-		return printf("&&");
-	case CLOG_TOKEN_BAR:
-		return printf("|");
-	case CLOG_TOKEN_CARET:
-		return printf("^");
-	case CLOG_TOKEN_AMPERSAND:
-		return printf("&");
-	case CLOG_TOKEN_EQUALS:
-		return printf("==");
-	case CLOG_TOKEN_NOT_EQUALS:
-		return printf("!=");
-	case CLOG_TOKEN_LESS_THAN:
-		return printf("<");
-	case CLOG_TOKEN_GREATER_THAN:
-		return printf(">");
-	case CLOG_TOKEN_LESS_THAN_EQUALS:
-		return printf("<=");
-	case CLOG_TOKEN_GREATER_THAN_EQUALS:
-		return printf(">=");
-	case CLOG_TOKEN_IN:
-		return printf("in");
-	case CLOG_TOKEN_LEFT_SHIFT:
-		return printf("<<");
-	case CLOG_TOKEN_RIGHT_SHIFT:
-		return printf(">>");
-
-	case CLOG_TOKEN_PLUS:
-		if (!builtin->args[1])
-			return clog_codegen_loadA(builtin->args[0]);
-
-		return (clog_codegen_loadX(builtin->args[1]) &&
-				clog_codegen_loadA(builtin->args[0]) &&
-				clog_codegen_emit("ADD X"));
-
-	case CLOG_TOKEN_MINUS:
-		if (!builtin->args[1])
-			return (clog_codegen_loadA(builtin->args[0]) &&
-					clog_codegen_emit("NEG"));
-
-		return (clog_codegen_loadX(builtin->args[1]) &&
-				clog_codegen_loadA(builtin->args[0]) &&
-				clog_codegen_emit("SUB X"));
-
-	case CLOG_TOKEN_STAR:
-		return printf("*");
-	case CLOG_TOKEN_SLASH:
-		return printf("/");
-	case CLOG_TOKEN_PERCENT:
-		return printf("%%");
-	case CLOG_TOKEN_DOUBLE_PLUS:
-		return printf("++");
-	case CLOG_TOKEN_DOUBLE_MINUS:
-		return printf("--");
-	case CLOG_TOKEN_EXCLAMATION:
-		return printf("!");
-	case CLOG_TOKEN_TILDA:
-		return printf("~");
-	case CLOG_TOKEN_OPEN_BRACKET:
-		return printf("[");
-	case CLOG_TOKEN_DOT:
-		return printf(".");
+		clog_cg_out_of_memory();
+		return NULL;
 	}
+
+	lit->line = 0;
+	lit->type = clog_ast_literal_string;
+	lit->value.string.len = strlen(szBuf);
+	lit->value.string.str = clog_malloc(lit->value.string.len+1);
+	if (!lit->value.string.str)
+	{
+		clog_free(lit);
+		clog_cg_out_of_memory();
+		return NULL;
+	}
+
+	memcpy(lit->value.string.str,szBuf,lit->value.string.len);
+	lit->value.string.str[lit->value.string.len] = 0;
+
+	retval = clog_cg_alloc_register(block,&lit);
+	if (!retval)
+	{
+		clog_free(lit->value.string.str);
+		clog_free(lit);
+		clog_cg_out_of_memory();
+		return NULL;
+	}
+
+	++block->temp_counter;
+
+	return retval;
+}
+
+static struct clog_cg_block_register* clog_cg_find_register(struct clog_cg_block* block, struct clog_ast_literal* id, int recursive)
+{
+	unsigned int i = 0;
+	for (;i < block->register_count;++i)
+	{
+		if (clog_ast_literal_compare(block->registers[i].id,id) == 0)
+			return &block->registers[i];
+	}
+
+	if (recursive && block->prev)
+		return clog_cg_find_register(block->prev,id,1);
+
+	return NULL;
+}
+
+static int clog_cg_alloc_result(struct clog_cg_block* block, struct clog_ast_literal* id, struct clog_cg_triplet* triplet)
+{
+	struct clog_cg_block_register* reg = id ? clog_cg_find_register(block,id,1) : clog_cg_alloc_temp_register(block);
+	if (!reg)
+		return 0;
+
+	triplet->val.expr.result.prev_use = reg->last_use;
+	triplet->val.expr.result.refcount = 0;
+	reg->last_use = triplet;
 
 	return 1;
 }
+
+static struct clog_cg_register* clog_cg_emit_triplet_IRL(struct clog_cg_block* block, struct clog_ast_literal* id, enum clog_opcode op, struct clog_cg_register* reg, struct clog_ast_literal* lit)
+{
+	struct clog_cg_triplet* triplet;
+	if (!clog_cg_alloc_triplet(block,&triplet))
+		return NULL;
+
+	if (!clog_cg_alloc_result(block,id,triplet))
+	{
+		clog_cg_free_triplet(block,triplet);
+		return NULL;
+	}
+
+	triplet->op = op;
+	triplet->val.expr.args[0].reg = reg;
+	triplet->val.expr.args[1].lit = lit;
+
+	++reg->refcount;
+
+	return &triplet->val.expr.result;
+}
+
+static struct clog_cg_register* clog_cg_emit_triplet_IRR(struct clog_cg_block* block, struct clog_ast_literal* id, enum clog_opcode op, struct clog_cg_register* reg0, struct clog_cg_register* reg1)
+{
+	struct clog_cg_triplet* triplet;
+	if (!clog_cg_alloc_triplet(block,&triplet))
+		return NULL;
+
+	if (!clog_cg_alloc_result(block,id,triplet))
+	{
+		clog_cg_free_triplet(block,triplet);
+		return NULL;
+	}
+
+	triplet->op = op;
+	triplet->val.expr.args[0].reg = reg0;
+	triplet->val.expr.args[1].reg = reg1;
+
+	++reg0->refcount;
+	++reg1->refcount;
+
+	return &triplet->val.expr.result;
+}
+
+static int clog_cg_alloc_block(struct clog_cg_block** block)
+{
+	*block = clog_malloc(sizeof(struct clog_cg_block));
+	if (!*block)
+		return clog_cg_out_of_memory();
+
+	memset(*block,0,sizeof(struct clog_cg_block));
+
+	return 1;
+}
+
+
+
+
+
+
 
 int clog_codegen(const struct clog_ast_statement_list* list)
 {
 	for (;list;list=list->next)
 	{
-		if (list->stmt)
-		{
-			switch (list->stmt->type)
-			{
-			case clog_ast_statement_expression:
-				if (list->stmt->stmt.expression)
-				{
-					switch (list->stmt->stmt.expression->type)
-					{
-					case clog_ast_expression_identifier:
-					case clog_ast_expression_literal:
-						/* Emit nothing */
-						break;
 
-					case clog_ast_expression_builtin:
-						if (!clog_codegen_expression_builtin(list->stmt->stmt.expression->expr.builtin))
-							return 0;
-						break;
-
-					case clog_ast_expression_call:
-						break;
-					}
-				}
-				break;
-
-			case clog_ast_statement_block:
-				if (!clog_codegen(list->stmt->stmt.block))
-					return 0;
-				break;
-
-			case clog_ast_statement_declaration:
-			case clog_ast_statement_constant:
-				if (!clog_codegen_loadA(list->next->stmt->stmt.expression->expr.builtin->args[1]))
-					return 0;
-
-				printf("PUSHA (%s)\n",list->stmt->stmt.declaration->value.string.str);
-
-				list=list->next;
-				break;
-
-			case clog_ast_statement_if:
-			case clog_ast_statement_do:
-			case clog_ast_statement_break:
-			case clog_ast_statement_continue:
-			case clog_ast_statement_return:
-				break;
-			}
-		}
 	}
 
 	return 1;
