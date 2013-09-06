@@ -427,7 +427,7 @@ static int clog_ast_literal_real_promote(struct clog_ast_literal* lit)
 	return 0;
 }
 
-static int clog_ast_literal_arith_convert(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2)
+int clog_ast_literal_arith_convert(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2)
 {
 	if (!lit1 || !lit2)
 		return 0;
@@ -500,6 +500,45 @@ struct clog_ast_literal* clog_ast_literal_append_string(struct clog_parser* pars
 
 	clog_token_free(parser,token);
 	return lit;
+}
+
+static int clog_ast_literal_add(struct clog_parser* parser, struct clog_ast_literal* p1, struct clog_ast_literal* p2)
+{
+	if (p1->type == clog_ast_literal_string && p2->type == clog_ast_literal_string)
+	{
+		if (!p1->value.string.len)
+		{
+			/* Swap via p3 */
+			struct clog_ast_literal* p3 = p2;
+			p2 = p1;
+			p1 = p3;
+		}
+
+		if (p2->value.string.len)
+		{
+			unsigned char* sz = clog_realloc(p1->value.string.str,p1->value.string.len + p2->value.string.len);
+			if (!sz)
+				return clog_ast_out_of_memory(parser);
+
+			memcpy(sz+p1->value.string.len,p2->value.string.str,p2->value.string.len);
+			p1->value.string.str = sz;
+			p1->value.string.len += p2->value.string.len;
+		}
+		return 2;
+	}
+	else if (p1->type != clog_ast_literal_string && p2->type != clog_ast_literal_string)
+	{
+		if (!clog_ast_literal_arith_convert(p1,p2))
+			return clog_syntax_error(parser,"+ requires numbers or strings",p1->line);
+
+		if (p1->type == clog_ast_literal_real)
+			p1->value.real += p2->value.real;
+		else
+			p1->value.integer += p2->value.integer;
+
+		return 2;
+	}
+	return 1;
 }
 
 void clog_ast_expression_free(struct clog_parser* parser, struct clog_ast_expression* expr)
@@ -743,21 +782,29 @@ int clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_a
 	if (type == CLOG_TOKEN_PLUS)
 	{
 		/* Unary + */
-		if (p1->type == clog_ast_expression_literal)
-		{
-			if (p1->expr.literal->type == clog_ast_literal_null ||
-					p1->expr.literal->type == clog_ast_literal_bool)
-			{
-				p1->expr.literal->type = clog_ast_literal_integer;
-			}
-			else if (p1->expr.literal->type != clog_ast_literal_integer &&
-					p1->expr.literal->type != clog_ast_literal_real)
-			{
-				return clog_syntax_error(parser,"+ requires a number",p1->expr.literal->line);
-			}
-		}
-		*expr = p1;
-		return 1;
+		struct clog_ast_literal* lit_null;
+		if (!clog_ast_literal_alloc(parser,&lit_null,NULL))
+			return 0;
+
+		lit_null->type = clog_ast_literal_integer;
+		if (!clog_ast_expression_alloc_literal(parser,expr,lit_null))
+			return 0;
+
+		return clog_ast_expression_alloc_builtin2(parser,expr,CLOG_TOKEN_PLUS,*expr,p1);
+	}
+
+	if (type == CLOG_TOKEN_MINUS)
+	{
+		/* Unary - */
+		struct clog_ast_literal* lit_null;
+		if (!clog_ast_literal_alloc(parser,&lit_null,NULL))
+			return 0;
+
+		lit_null->type = clog_ast_literal_integer;
+		if (!clog_ast_expression_alloc_literal(parser,expr,lit_null))
+			return 0;
+
+		return clog_ast_expression_alloc_builtin2(parser,expr,CLOG_TOKEN_MINUS,*expr,p1);
 	}
 
 	return clog_ast_expression_alloc_builtin3(parser,expr,type,p1,NULL,NULL);
@@ -1204,110 +1251,79 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	switch ((*expr)->expr.builtin->type)
 	{
 	case CLOG_TOKEN_PLUS:
-		if (p2 && !p1)
-		{
-			p1 = p2;
-			p2 = NULL;
-		}
-		if (p1 && p2)
-		{
-			if (p1->type == clog_ast_literal_string && p2->type == clog_ast_literal_string)
-			{
-				if (!p1->value.string.len)
-				{
-					/* Swap via p3 */
-					p3 = p2;
-					p2 = p1;
-					p1 = p3;
-				}
-
-				if (p2->value.string.len)
-				{
-					unsigned char* sz = clog_realloc(p1->value.string.str,p1->value.string.len + p2->value.string.len);
-					if (!sz)
-					{
-						clog_ast_out_of_memory(parser);
-						goto failed;
-					}
-
-					memcpy(sz+p1->value.string.len,p2->value.string.str,p2->value.string.len);
-					p1->value.string.str = sz;
-					p1->value.string.len += p2->value.string.len;
-				}
-			}
-			else if (p1->type != clog_ast_literal_string && p2->type != clog_ast_literal_string)
-			{
-				if (!clog_ast_literal_arith_convert(p1,p2))
-				{
-					clog_syntax_error(parser,"+ requires numbers or strings",p1->line);
-					goto failed;
-				}
-
-				if (p1->type == clog_ast_literal_real)
-					p1->value.real += p2->value.real;
-				else
-					p1->value.integer += p2->value.integer;
-			}
-			goto replace_with_p1;
-		}
 		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
 			goto replace_with_p1;
-
-		break;
-
-	case CLOG_TOKEN_MINUS:
-		if (p1)
+		if (p2 && p2->type == clog_ast_literal_real && p2->value.real != p2->value.real) /* NaN */
+			goto replace_with_p2;
+		if (p1 && p2)
 		{
-			if (!p2)
+			int ret = clog_ast_literal_add(parser,p1,p2);
+			if (!ret)
+				goto failed;
+			if (ret == 2)
+				goto replace_with_p1;
+		}
+		if (!p2 && p1)
+		{
+			p2 = p1;
+			p1 = NULL;
+		}
+		if (p2)
+		{
+			if (p2->type == clog_ast_literal_real)
 			{
-				if ((*expr)->expr.builtin->args[1])
-					break;
-
-				/* Unary - */
-				switch (p1->type)
-				{
-				case clog_ast_literal_integer:
-					p1->value.integer = -p1->value.integer;
-					break;
-
-				case clog_ast_literal_real:
-					p1->value.real = -p1->value.real;
-					break;
-
-				default:
-					clog_syntax_error(parser,"- requires a number",p1->line);
-					goto failed;
-				}
+				if (p2->value.real == 0.0)
+					goto replace_with_arg0;
 			}
 			else
 			{
-				if (!clog_ast_literal_arith_convert(p1,p2))
+				if (!clog_ast_literal_int_promote(p2))
 				{
-					clog_syntax_error(parser,"- requires numbers",p1->line);
+					clog_syntax_error(parser,"+ requires numbers",p2->line);
 					goto failed;
 				}
-				if (p1->type == clog_ast_literal_real)
-					p1->value.real -= p2->value.real;
-				else
-					p1->value.integer -= p2->value.integer;
+				if (p2->value.integer == 0.0)
+					goto replace_with_arg0;
 			}
-			goto replace_with_p1;
 		}
+		break;
+
+	case CLOG_TOKEN_MINUS:
 		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
 			goto replace_with_p1;
-
 		if (p2 && p2->type == clog_ast_literal_real && p2->value.real != p2->value.real) /* NaN */
+			goto replace_with_p2;
+		if (p1 && p2)
 		{
-			if (!clog_ast_expression_alloc_literal(parser,&e,p2))
+			if (!clog_ast_literal_arith_convert(p1,p2))
 			{
-				p2 = NULL;
+				clog_syntax_error(parser,"- requires numbers",p1->line);
 				goto failed;
 			}
-			p2 = NULL;
-			clog_ast_expression_free(parser,*expr);
-			*expr = e;
-			reduction->reduced = 1;
-			goto success;
+			if (p1->type == clog_ast_literal_real)
+				p1->value.real -= p2->value.real;
+			else
+				p1->value.integer -= p2->value.integer;
+
+			goto replace_with_p1;
+		}
+		if (p2)
+		{
+			if (p2->type == clog_ast_literal_real)
+			{
+				if (p2->value.real == 0.0)
+					goto replace_with_arg0;
+			}
+			else
+			{
+				if (!clog_ast_literal_int_promote(p2))
+				{
+					clog_syntax_error(parser,"- requires numbers",p2->line);
+					goto failed;
+				}
+				if (p2->value.integer == 0.0)
+					goto replace_with_arg0;
+			}
 		}
 		break;
 
@@ -1344,11 +1360,10 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		break;
 
 	case CLOG_TOKEN_STAR:
-		if (p2 && !p1)
-		{
-			p1 = p2;
-			p2 = NULL;
-		}
+		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
+			goto replace_with_p1;
+		if (p2 && p2->type == clog_ast_literal_real && p2->value.real != p2->value.real) /* NaN */
+			goto replace_with_p2;
 		if (p1 && p2)
 		{
 			if (!clog_ast_literal_arith_convert(p1,p2))
@@ -1356,54 +1371,46 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 				clog_syntax_error(parser,"* requires numbers",p1->line);
 				goto failed;
 			}
-
 			if (p1->type == clog_ast_literal_real)
 				p1->value.real *= p2->value.real;
 			else
 				p1->value.integer *= p2->value.integer;
 			goto replace_with_p1;
 		}
-		if (p1)
+		if (p1 && !p2)
 		{
-			if (p1->type == clog_ast_literal_real)
+			p2 = p1;
+			p1 = NULL;
+		}
+		if (p2)
+		{
+			if (p2->type == clog_ast_literal_real)
 			{
-				if (p1->value.real == 1.0)
-				{
-					e = (*expr)->expr.builtin->args[0];
-					(*expr)->expr.builtin->args[0] = NULL;
-					clog_ast_expression_free(parser,*expr);
-					*expr = e;
-					reduction->reduced = 1;
-					goto success;
-				}
-				if (p1->value.real == 0.0)
-					goto replace_with_p1;
-				if (p1->value.real != p1->value.real) /* NaN */
-					goto replace_with_p1;
+				if (p2->value.real == 1.0)
+					goto replace_with_arg0;
+				if (p2->value.real == 0.0)
+					goto replace_with_p2;
 			}
 			else
 			{
-				if (!clog_ast_literal_int_promote(p1))
+				if (!clog_ast_literal_int_promote(p2))
 				{
-					clog_syntax_error(parser,"* requires numbers",p1->line);
+					clog_syntax_error(parser,"* requires numbers",p2->line);
 					goto failed;
 				}
-				if (p1->value.integer == 1)
-				{
-					e = (*expr)->expr.builtin->args[0];
-					(*expr)->expr.builtin->args[0] = NULL;
-					clog_ast_expression_free(parser,*expr);
-					*expr = e;
-					reduction->reduced = 1;
-					goto success;
-				}
-				if (p1->value.integer == 0.0)
-					goto replace_with_p1;
+				if (p2->value.integer == 1)
+					goto replace_with_arg0;
+				if (p2->value.integer == 0.0)
+					goto replace_with_p2;
 			}
 		}
 		break;
 
 	case CLOG_TOKEN_SLASH:
+		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
+			goto replace_with_p1;
+		if (p2 && p2->type == clog_ast_literal_real && p2->value.real != p2->value.real) /* NaN */
+			goto replace_with_p2;
 		if (p1 && p2)
 		{
 			if (!clog_ast_literal_arith_convert(p1,p2))
@@ -1432,36 +1439,16 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			}
 			goto replace_with_p1;
 		}
-		else if (p2)
+		if (p2)
 		{
 			if (p2->type == clog_ast_literal_real)
 			{
 				if (p2->value.real == 1.0)
-				{
-					e = (*expr)->expr.builtin->args[0];
-					(*expr)->expr.builtin->args[0] = NULL;
-					clog_ast_expression_free(parser,*expr);
-					*expr = e;
-					reduction->reduced = 1;
-					goto success;
-				}
+					goto replace_with_arg0;
 				if (p2->value.real == 0.0)
 				{
 					clog_syntax_error(parser,"Division by 0.0",p2->line);
 					goto failed;
-				}
-				if (p2->value.real != p2->value.real) /* NaN */
-				{
-					if (!clog_ast_expression_alloc_literal(parser,&e,p2))
-					{
-						p2 = NULL;
-						goto failed;
-					}
-					p2 = NULL;
-					clog_ast_expression_free(parser,*expr);
-					*expr = e;
-					reduction->reduced = 1;
-					goto success;
 				}
 			}
 			else
@@ -1472,14 +1459,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 					goto failed;
 				}
 				if (p2->value.integer == 1)
-				{
-					e = (*expr)->expr.builtin->args[0];
-					(*expr)->expr.builtin->args[0] = NULL;
-					clog_ast_expression_free(parser,*expr);
-					*expr = e;
-					reduction->reduced = 1;
-					goto success;
-				}
+					goto replace_with_arg0;
 				if (p2->value.integer == 0)
 				{
 					clog_syntax_error(parser,"Division by 0",p1->line);
@@ -1508,7 +1488,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			p1->value.integer %= p2->value.integer;
 			goto replace_with_p1;
 		}
-		else if (p2)
+		if (p2)
 		{
 			if (!clog_ast_literal_int_promote(p2))
 			{
@@ -1520,6 +1500,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 				struct clog_ast_literal* lit_zero;
 				if (!clog_ast_literal_alloc_bool(parser,&lit_zero,0))
 					goto failed;
+				lit_zero->type = clog_ast_literal_integer;
 
 				clog_ast_expression_free(parser,*expr);
 				if (!clog_ast_expression_alloc_literal(parser,expr,lit_zero))
@@ -1552,7 +1533,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			clog_syntax_error_token(parser,NULL," requires integers",(*expr)->expr.builtin->type,NULL,p1->line);
 			goto failed;
 		}
-		else if (p2)
+		if (p2)
 		{
 			if (!clog_ast_literal_int_promote(p2))
 			{
@@ -1561,14 +1542,7 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			}
 
 			if (p2->value.integer == 0)
-			{
-				e = (*expr)->expr.builtin->args[0];
-				(*expr)->expr.builtin->args[0] = NULL;
-				clog_ast_expression_free(parser,*expr);
-				*expr = e;
-				reduction->reduced = 1;
-				goto success;
-			}
+				goto replace_with_arg0;
 		}
 		break;
 
@@ -1690,14 +1664,9 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		if (clog_ast_literal_compare(reduction->value,p2) == 0)
 		{
 			/* Replace the expression with a reference */
-			e = (*expr)->expr.builtin->args[0];
-			(*expr)->expr.builtin->args[0] = NULL;
-			clog_ast_expression_free(parser,*expr);
-			*expr = e;
-			(*expr)->constant = 1;
-			reduction->reduced = 1;
+			(*expr)->expr.builtin->args[0]->constant = 1;
 			reduction->referenced = 1;
-			goto success;
+			goto replace_with_arg0;
 		}
 
 		clog_ast_literal_free(parser,reduction->value);
@@ -1830,41 +1799,14 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		goto replace_with_assign;
 
 	case CLOG_TOKEN_PLUS_ASSIGN:
-		if (reduction->value->type == clog_ast_literal_string && p2->type == clog_ast_literal_string)
 		{
-			if (!reduction->value->value.string.len)
-			{
-				clog_ast_literal_free(parser,reduction->value);
-				reduction->value = p2;
-				p2 = NULL;
-			}
-			else if (p2->value.string.len)
-			{
-				unsigned char* sz = clog_realloc(reduction->value->value.string.str,reduction->value->value.string.len + p2->value.string.len);
-				if (!sz)
-				{
-					clog_ast_out_of_memory(parser);
-					goto failed;
-				}
-
-				memcpy(sz+reduction->value->value.string.len,p2->value.string.str,p2->value.string.len);
-				reduction->value->value.string.str = sz;
-				reduction->value->value.string.len += p2->value.string.len;
-			}
-		}
-		else
-		{
-			if (!clog_ast_literal_arith_convert(reduction->value,p2))
-			{
-				clog_syntax_error(parser,"+= requires a number or string",p2->line);
+			int ret = clog_ast_literal_add(parser,reduction->value,p2);
+			if (!ret)
 				goto failed;
-			}
-			if (reduction->value->type == clog_ast_literal_real)
-				reduction->value->value.real += p2->value.real;
-			else
-				reduction->value->value.integer += p2->value.integer;
+			if (ret == 2)
+				goto replace_with_assign;
 		}
-		goto replace_with_assign;
+		break;
 
 	case CLOG_TOKEN_MINUS_ASSIGN:
 		if (!clog_ast_literal_arith_convert(reduction->value,p2))
@@ -1917,6 +1859,14 @@ success:
 	clog_ast_literal_free(parser,p3);
 	return 1;
 
+replace_with_arg0:
+	e = (*expr)->expr.builtin->args[0];
+	(*expr)->expr.builtin->args[0] = NULL;
+	clog_ast_expression_free(parser,*expr);
+	*expr = e;
+	reduction->reduced = 1;
+	goto success;
+
 replace_with_p1:
 	if (!clog_ast_expression_alloc_literal(parser,&e,p1))
 	{
@@ -1924,6 +1874,18 @@ replace_with_p1:
 		goto failed;
 	}
 	p1 = NULL;
+	clog_ast_expression_free(parser,*expr);
+	*expr = e;
+	reduction->reduced = 1;
+	goto success;
+
+replace_with_p2:
+	if (!clog_ast_expression_alloc_literal(parser,&e,p2))
+	{
+		p2 = NULL;
+		goto failed;
+	}
+	p2 = NULL;
 	clog_ast_expression_free(parser,*expr);
 	*expr = e;
 	reduction->reduced = 1;
