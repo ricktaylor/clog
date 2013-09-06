@@ -745,9 +745,12 @@ int clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_a
 		/* Unary + */
 		if (p1->type == clog_ast_expression_literal)
 		{
-			if (p1->expr.literal->type != clog_ast_literal_null &&
-					p1->expr.literal->type != clog_ast_literal_bool &&
-					p1->expr.literal->type != clog_ast_literal_integer &&
+			if (p1->expr.literal->type == clog_ast_literal_null ||
+					p1->expr.literal->type == clog_ast_literal_bool)
+			{
+				p1->expr.literal->type = clog_ast_literal_integer;
+			}
+			else if (p1->expr.literal->type != clog_ast_literal_integer &&
 					p1->expr.literal->type != clog_ast_literal_real)
 			{
 				return clog_syntax_error(parser,"+ requires a number",p1->expr.literal->line);
