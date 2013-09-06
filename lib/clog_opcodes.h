@@ -10,11 +10,15 @@
 
 enum clog_opcode
 {
-	clog_opcode_NOP = 0,
-
-	clog_opcode_ARITH = 1,	/* Arithmetic opcodes, format: 4 bits, A,B,C */
-
-	clog_opcode_MAX
+	clog_opcode_MOV,
+	clog_opcode_LOAD,
+	clog_opcode_NEG,
+	clog_opcode_ADD_L,
+	clog_opcode_ADD_R,
+	clog_opcode_SUB_L,
+	clog_opcode_SUB_R,
+	clog_opcode_MUL_L,
+	clog_opcode_MUL_R,
 };
 
 #endif /* CLOG_OPCODES_H_ */
