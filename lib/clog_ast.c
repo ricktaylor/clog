@@ -740,6 +740,23 @@ int clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_a
 	if (!p1)
 		return 0;
 
+	if (type == CLOG_TOKEN_PLUS)
+	{
+		/* Unary + */
+		if (p1->type == clog_ast_expression_literal)
+		{
+			if (p1->expr.literal->type != clog_ast_literal_null &&
+					p1->expr.literal->type != clog_ast_literal_bool &&
+					p1->expr.literal->type != clog_ast_literal_integer &&
+					p1->expr.literal->type != clog_ast_literal_real)
+			{
+				return clog_syntax_error(parser,"+ requires a number",p1->expr.literal->line);
+			}
+		}
+		*expr = p1;
+		return 1;
+	}
+
 	return clog_ast_expression_alloc_builtin3(parser,expr,type,p1,NULL,NULL);
 }
 
@@ -1186,26 +1203,12 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	case CLOG_TOKEN_PLUS:
 		if (p2 && !p1)
 		{
-			struct clog_ast_literal* p = p2;
-			p2 = p1;
-			p1 = p;
+			p1 = p2;
+			p2 = NULL;
 		}
-		if (p1)
+		if (p1 && p2)
 		{
-			if (!p2)
-			{
-				if ((*expr)->expr.builtin->args[1])
-					break;
-
-				/* Unary + */
-				if (p1->type != clog_ast_literal_integer &&
-					p1->type != clog_ast_literal_real)
-				{
-					clog_syntax_error(parser,"+ requires a number",p1->line);
-					goto failed;
-				}
-			}
-			else if (p1->type == clog_ast_literal_string && p2->type == clog_ast_literal_string)
+			if (p1->type == clog_ast_literal_string && p2->type == clog_ast_literal_string)
 			{
 				if (!p1->value.string.len)
 				{
@@ -1243,12 +1246,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 					p1->value.integer += p2->value.integer;
 			}
 			goto replace_with_p1;
-		}
-		if (p2 && !p1)
-		{
-			struct clog_ast_literal* p = p2;
-			p2 = p1;
-			p1 = p;
 		}
 		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
 			goto replace_with_p1;
@@ -1344,6 +1341,11 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 		break;
 
 	case CLOG_TOKEN_STAR:
+		if (p2 && !p1)
+		{
+			p1 = p2;
+			p2 = NULL;
+		}
 		if (p1 && p2)
 		{
 			if (!clog_ast_literal_arith_convert(p1,p2))
@@ -1357,12 +1359,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			else
 				p1->value.integer *= p2->value.integer;
 			goto replace_with_p1;
-		}
-		if (p2 && !p1)
-		{
-			struct clog_ast_literal* p = p2;
-			p2 = p1;
-			p1 = p;
 		}
 		if (p1)
 		{
