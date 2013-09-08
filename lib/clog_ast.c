@@ -727,127 +727,8 @@ int clog_ast_expression_alloc_id(struct clog_parser* parser, struct clog_ast_exp
 	return 1;
 }
 
-int clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_expression** expr, struct clog_ast_expression* p1, struct clog_token* token)
+static int clog_ast_expression_alloc_builtin(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2, struct clog_ast_expression* p3)
 {
-	struct clog_ast_expression* p2;
-
-	*expr = NULL;
-
-	if (!token || !p1)
-	{
-		clog_ast_expression_free(parser,p1);
-		clog_token_free(parser,token);
-		return 0;
-	}
-
-	if (!clog_ast_expression_alloc_id(parser,&p2,token))
-	{
-		clog_ast_expression_free(parser,p1);
-		return 0;
-	}
-
-	if (!clog_ast_expression_alloc_builtin2(parser,expr,CLOG_TOKEN_DOT,p1,p2))
-		return 0;
-
-	(*expr)->lvalue = 1;
-
-	return 1;
-}
-
-int clog_ast_expression_alloc_builtin_lvalue(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
-{
-	if (type == CLOG_TOKEN_OPEN_BRACKET)
-	{
-		if (!clog_ast_expression_alloc_builtin2(parser,expr,type,p1,p2))
-			return 0;
-	}
-	else
-	{
-		if (!clog_ast_expression_alloc_builtin1(parser,expr,type,p1))
-			return 0;
-	}
-
-	(*expr)->lvalue = 1;
-
-	return 1;
-}
-
-int clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1)
-{
-	*expr = NULL;
-
-	if (!p1)
-		return 0;
-
-	if (type == CLOG_TOKEN_PLUS)
-	{
-		/* Unary + */
-		struct clog_ast_literal* lit_null;
-		if (!clog_ast_literal_alloc(parser,&lit_null,NULL))
-			return 0;
-
-		lit_null->type = clog_ast_literal_integer;
-		if (!clog_ast_expression_alloc_literal(parser,expr,lit_null))
-			return 0;
-
-		return clog_ast_expression_alloc_builtin2(parser,expr,CLOG_TOKEN_PLUS,*expr,p1);
-	}
-
-	if (type == CLOG_TOKEN_MINUS)
-	{
-		/* Unary - */
-		struct clog_ast_literal* lit_null;
-		if (!clog_ast_literal_alloc(parser,&lit_null,NULL))
-			return 0;
-
-		lit_null->type = clog_ast_literal_integer;
-		if (!clog_ast_expression_alloc_literal(parser,expr,lit_null))
-			return 0;
-
-		return clog_ast_expression_alloc_builtin2(parser,expr,CLOG_TOKEN_MINUS,*expr,p1);
-	}
-
-	return clog_ast_expression_alloc_builtin3(parser,expr,type,p1,NULL,NULL);
-}
-
-int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
-{
-	*expr = NULL;
-
-	if (!p1 || !p2)
-	{
-		clog_ast_expression_free(parser,p1);
-		clog_ast_expression_free(parser,p2);
-		return 0;
-	}
-
-	if (type == CLOG_TOKEN_NOT_EQUALS)
-	{
-		struct clog_ast_expression* e;
-		if (!clog_ast_expression_alloc_builtin2(parser,&e,CLOG_TOKEN_EQUALS,p1,p2))
-			return 0;
-
-		return clog_ast_expression_alloc_builtin1(parser,expr,CLOG_TOKEN_EXCLAMATION,e);
-	}
-
-	return clog_ast_expression_alloc_builtin3(parser,expr,type,p1,p2,NULL);
-}
-
-int clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2, struct clog_ast_expression* p3)
-{
-	*expr = NULL;
-
-	if (type == CLOG_TOKEN_QUESTION)
-	{
-		if (!p1 || !p2 || !p3)
-		{
-			clog_ast_expression_free(parser,p1);
-			clog_ast_expression_free(parser,p2);
-			clog_ast_expression_free(parser,p3);
-			return 0;
-		}
-	}
-
 	*expr = clog_malloc(sizeof(struct clog_ast_expression));
 	if (!*expr)
 	{
@@ -902,9 +783,108 @@ int clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_a
 	return 1;
 }
 
+int clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_expression** expr, struct clog_ast_expression* p1, struct clog_token* token)
+{
+	struct clog_ast_expression* p2;
+
+	*expr = NULL;
+
+	if (!token || !p1)
+	{
+		clog_ast_expression_free(parser,p1);
+		clog_token_free(parser,token);
+		return 0;
+	}
+
+	if (!clog_ast_expression_alloc_id(parser,&p2,token))
+	{
+		clog_ast_expression_free(parser,p1);
+		return 0;
+	}
+
+	if (!clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_DOT,p1,p2,NULL))
+		return 0;
+
+	(*expr)->lvalue = 1;
+
+	return 1;
+}
+
+int clog_ast_expression_alloc_builtin_lvalue(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
+{
+	if (!clog_ast_expression_alloc_builtin(parser,expr,type,p1,p2,NULL))
+		return 0;
+
+	(*expr)->lvalue = 1;
+
+	return 1;
+}
+
+int clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1)
+{
+	*expr = NULL;
+
+	if (!p1)
+		return 0;
+
+	if (type == CLOG_TOKEN_PLUS || type == CLOG_TOKEN_MINUS)
+	{
+		/* Unary + or - */
+		struct clog_ast_literal* lit_null;
+		if (!clog_ast_literal_alloc(parser,&lit_null,NULL))
+			return 0;
+
+		lit_null->type = clog_ast_literal_integer;
+		if (!clog_ast_expression_alloc_literal(parser,expr,lit_null))
+			return 0;
+
+		return clog_ast_expression_alloc_builtin2(parser,expr,type,*expr,p1);
+	}
+
+	return clog_ast_expression_alloc_builtin(parser,expr,type,p1,NULL,NULL);
+}
+
+int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
+{
+	*expr = NULL;
+
+	if (!p1 || !p2)
+	{
+		clog_ast_expression_free(parser,p1);
+		clog_ast_expression_free(parser,p2);
+		return 0;
+	}
+
+	if (type == CLOG_TOKEN_NOT_EQUALS)
+	{
+		struct clog_ast_expression* e;
+		if (!clog_ast_expression_alloc_builtin2(parser,&e,CLOG_TOKEN_EQUALS,p1,p2))
+			return 0;
+
+		return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_EXCLAMATION,e,NULL,NULL);
+	}
+
+	return clog_ast_expression_alloc_builtin(parser,expr,type,p1,p2,NULL);
+}
+
+int clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2, struct clog_ast_expression* p3)
+{
+	*expr = NULL;
+
+	if (!p1 || !p2 || !p3)
+	{
+		clog_ast_expression_free(parser,p1);
+		clog_ast_expression_free(parser,p2);
+		clog_ast_expression_free(parser,p3);
+		return 0;
+	}
+
+	return clog_ast_expression_alloc_builtin(parser,expr,type,p1,p2,p3);
+}
+
 int clog_ast_expression_alloc_assign(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
 {
-	if (!clog_ast_expression_alloc_builtin2(parser,expr,type,p1,p2))
+	if (!clog_ast_expression_alloc_builtin(parser,expr,type,p1,p2,NULL))
 		return 0;
 
 	(*expr)->lvalue = 1;
@@ -1083,18 +1063,12 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	case CLOG_TOKEN_OR:
 	case CLOG_TOKEN_QUESTION:
 		if (clog_ast_expression_reduce_comma(expr,0))
-		{
 			reduction->reduced = 1;
-			return 1;
-		}
 		break;
 
 	default:
 		if (clog_ast_expression_reduce_comma(expr,0) || clog_ast_expression_reduce_comma(expr,1))
-		{
 			reduction->reduced = 1;
-			return 1;
-		}
 		break;
 	}
 
@@ -3351,7 +3325,7 @@ int clog_parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_
 	struct clog_parser parser = {0};
 
 	parser.line = 1;
-	parser.reduce = 0;
+	parser.reduce = 1;
 
 	void* lemon = clog_parserAlloc(&clog_malloc);
 	if (!lemon)
