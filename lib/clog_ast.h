@@ -75,8 +75,11 @@ void clog_ast_literal_free(struct clog_parser* parser, struct clog_ast_literal* 
 int clog_ast_literal_alloc(struct clog_parser* parser, struct clog_ast_literal** lit, struct clog_token* token);
 int clog_ast_literal_alloc_bool(struct clog_parser* parser, struct clog_ast_literal** lit, int value);
 struct clog_ast_literal* clog_ast_literal_append_string(struct clog_parser* parser, struct clog_ast_literal* lit, struct clog_token* token);
+int clog_ast_literal_clone(struct clog_parser* parser, struct clog_ast_literal** new, const struct clog_ast_literal* lit);
+
 int clog_ast_literal_compare(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2);
 int clog_ast_literal_arith_convert(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2);
+int clog_ast_literal_id_compare(const struct clog_ast_literal* lit1, const struct clog_ast_literal* lit2);
 
 struct clog_ast_expression_list;
 
@@ -124,6 +127,8 @@ int clog_ast_expression_alloc_assign(struct clog_parser* parser, struct clog_ast
 int clog_ast_expression_alloc_builtin_lvalue(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2);
 int clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_expression** expr, struct clog_ast_expression* p1, struct clog_token* token);
 int clog_ast_expression_alloc_call(struct clog_parser* parser, struct clog_ast_expression** expr, struct clog_ast_expression* call, struct clog_ast_expression_list* list);
+
+unsigned long clog_ast_expression_line(const struct clog_ast_expression* expr);
 
 struct clog_ast_expression_list
 {
@@ -188,6 +193,9 @@ int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_
 int clog_ast_statement_list_alloc_for(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* init_stmt, struct clog_ast_statement_list* cond_stmt, struct clog_ast_expression* iter_expr, struct clog_ast_statement_list* loop_stmt);
 int clog_ast_statement_list_alloc_return(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_expression* expr);
 int clog_ast_statement_list_alloc(struct clog_parser* parser, struct clog_ast_statement_list** list, enum clog_ast_statement_type type);
+
+/* Optimization */
+int clog_ast_statement_list_reduce_constants(struct clog_parser* parser, struct clog_ast_statement_list** block);
 
 struct clog_parser
 {
