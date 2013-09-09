@@ -116,18 +116,18 @@ expression(A) ::= expression(B) COMMA assignment_expression(C). { clog_ast_expre
 %destructor assignment_expression                       { clog_ast_expression_free(parser,$$); }
 assignment_expression(A) ::= conditional_expression(B). { A = B; }
 assignment_expression(A) ::= throw_expression(B).       { A = B; }
-assignment_expression(A) ::= logical_OR_expression(B) ASSIGN assignment_expression(C).               { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_ASSIGN,B,C); }
-/*assignment_expression(A) ::= logical_OR_expression(B) COLON_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_COLON_ASSIGN,B,C); }*/
-assignment_expression(A) ::= logical_OR_expression(B) STAR_ASSIGN assignment_expression(C).          { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_STAR_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) SLASH_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_SLASH_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) PERCENT_ASSIGN assignment_expression(C).       { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_PERCENT_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) PLUS_ASSIGN assignment_expression(C).          { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_PLUS_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) MINUS_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_MINUS_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) RIGHT_SHIFT_ASSIGN assignment_expression(C).   { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_RIGHT_SHIFT_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) LEFT_SHIFT_ASSIGN assignment_expression(C).    { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_LEFT_SHIFT_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) AMPERSAND_ASSIGN assignment_expression(C).     { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_AMPERSAND_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) CARET_ASSIGN assignment_expression(C). { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_CARET_ASSIGN,B,C); }
-assignment_expression(A) ::= logical_OR_expression(B) BAR_ASSIGN assignment_expression(C).           { clog_ast_expression_alloc_assign(parser,&A,CLOG_TOKEN_BAR_ASSIGN,B,C); } 
+assignment_expression(A) ::= logical_OR_expression(B) ASSIGN assignment_expression(C).               { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_ASSIGN,B,C); }
+/*assignment_expression(A) ::= logical_OR_expression(B) COLON_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_COLON_ASSIGN,B,C); }*/
+assignment_expression(A) ::= logical_OR_expression(B) STAR_ASSIGN assignment_expression(C).          { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_STAR_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) SLASH_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_SLASH_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) PERCENT_ASSIGN assignment_expression(C).       { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_PERCENT_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) PLUS_ASSIGN assignment_expression(C).          { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_PLUS_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) MINUS_ASSIGN assignment_expression(C).         { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_MINUS_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) RIGHT_SHIFT_ASSIGN assignment_expression(C).   { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_RIGHT_SHIFT_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) LEFT_SHIFT_ASSIGN assignment_expression(C).    { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_LEFT_SHIFT_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) AMPERSAND_ASSIGN assignment_expression(C).     { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_AMPERSAND_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) CARET_ASSIGN assignment_expression(C). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_CARET_ASSIGN,B,C); }
+assignment_expression(A) ::= logical_OR_expression(B) BAR_ASSIGN assignment_expression(C).           { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_BAR_ASSIGN,B,C); } 
 
 %type throw_expression                                  { struct clog_ast_expression* }
 %destructor throw_expression                            { clog_ast_expression_free(parser,$$); }
@@ -201,8 +201,8 @@ multiplicative_expression(A) ::= multiplicative_expression(B) PERCENT unary_expr
 %type unary_expression                         { struct clog_ast_expression* }
 %destructor unary_expression                   { clog_ast_expression_free(parser,$$); }
 unary_expression(A) ::= postfix_expression(B). { A = B; }
-unary_expression(A) ::= DOUBLE_PLUS unary_expression(B).  { clog_ast_expression_alloc_builtin_lvalue(parser,&A,CLOG_TOKEN_DOUBLE_PLUS,B,NULL); }
-unary_expression(A) ::= DOUBLE_MINUS unary_expression(B). { clog_ast_expression_alloc_builtin_lvalue(parser,&A,CLOG_TOKEN_DOUBLE_MINUS,B,NULL); }
+unary_expression(A) ::= DOUBLE_PLUS unary_expression(B).  { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_DOUBLE_PLUS,NULL,B); }
+unary_expression(A) ::= DOUBLE_MINUS unary_expression(B). { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_DOUBLE_MINUS,NULL,B); }
 unary_expression(A) ::= PLUS unary_expression(B).         { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_PLUS,B); }
 unary_expression(A) ::= MINUS unary_expression(B).        { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_MINUS,B); }
 unary_expression(A) ::= EXCLAMATION unary_expression(B).  { clog_ast_expression_alloc_builtin1(parser,&A,CLOG_TOKEN_EXCLAMATION,B); }
@@ -211,7 +211,7 @@ unary_expression(A) ::= TILDA unary_expression(B).        { clog_ast_expression_
 %type postfix_expression                         { struct clog_ast_expression* }
 %destructor postfix_expression                   { clog_ast_expression_free(parser,$$); }
 postfix_expression(A) ::= primary_expression(B). { A = B; }
-postfix_expression(A) ::= postfix_expression(B) OPEN_BRACKET expression(C) CLOSE_BRACKET.  { clog_ast_expression_alloc_builtin_lvalue(parser,&A,CLOG_TOKEN_OPEN_BRACKET,B,C); }
+postfix_expression(A) ::= postfix_expression(B) OPEN_BRACKET expression(C) CLOSE_BRACKET.  { clog_ast_expression_alloc_builtin2(parser,&A,CLOG_TOKEN_OPEN_BRACKET,B,C); }
 postfix_expression(A) ::= postfix_expression(B) OPEN_PAREN CLOSE_PAREN.                    { clog_ast_expression_alloc_call(parser,&A,B,NULL); }
 postfix_expression(A) ::= postfix_expression(B) OPEN_PAREN expression_list(C) CLOSE_PAREN. { clog_ast_expression_alloc_call(parser,&A,B,C); }
 postfix_expression(A) ::= postfix_expression(B) DOT ID(C).    { clog_ast_expression_alloc_dot(parser,&A,B,C); }       

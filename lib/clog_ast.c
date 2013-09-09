@@ -457,8 +457,6 @@ static int clog_ast_expression_clone(struct clog_parser* parser, struct clog_ast
 		return clog_ast_out_of_memory(parser);
 
 	(*new)->type = expr->type;
-	(*new)->lvalue = expr->lvalue;
-	(*new)->constant = expr->constant;
 
 	switch ((*new)->type)
 	{
@@ -554,8 +552,6 @@ int clog_ast_expression_alloc_literal(struct clog_parser* parser, struct clog_as
 	}
 
 	(*expr)->type = clog_ast_expression_literal;
-	(*expr)->lvalue = 0;
-	(*expr)->constant = 1;
 	(*expr)->expr.literal = lit;
 
 	return 1;
@@ -576,8 +572,6 @@ int clog_ast_expression_alloc_id(struct clog_parser* parser, struct clog_ast_exp
 	}
 
 	(*expr)->type = clog_ast_expression_identifier;
-	(*expr)->lvalue = 1;
-	(*expr)->constant = 1;
 
 	if (!clog_ast_literal_alloc(parser,&(*expr)->expr.identifier,token))
 	{
@@ -601,7 +595,6 @@ static int clog_ast_expression_alloc_builtin(struct clog_parser* parser, struct 
 	}
 
 	(*expr)->type = clog_ast_expression_builtin;
-	(*expr)->lvalue = 0;
 	(*expr)->expr.builtin = clog_malloc(sizeof(struct clog_ast_expression_builtin));
 	if (!(*expr)->expr.builtin)
 	{
@@ -618,29 +611,6 @@ static int clog_ast_expression_alloc_builtin(struct clog_parser* parser, struct 
 	(*expr)->expr.builtin->args[0] = p1;
 	(*expr)->expr.builtin->args[1] = p2;
 	(*expr)->expr.builtin->args[2] = p3;
-
-	if (type == CLOG_TOKEN_COMMA)
-	{
-		if (p2 && p2->type == clog_ast_expression_identifier)
-			p2->constant = 0;
-
-		(*expr)->lvalue = p2->lvalue;
-	}
-	else
-	{
-		if (p1 && p1->type == clog_ast_expression_identifier)
-			p1->constant = 0;
-
-		if (p2 && p2->type == clog_ast_expression_identifier)
-			p2->constant = 0;
-
-		if (p3 && p3->type == clog_ast_expression_identifier)
-			p3->constant = 0;
-	}
-
-	(*expr)->constant = (p1->constant &&
-			(p2 ? p2->constant : 1) &&
-			(p3 ? p3->constant : 1) ? 1 : 0);
 
 	return 1;
 }
@@ -664,22 +634,7 @@ int clog_ast_expression_alloc_dot(struct clog_parser* parser, struct clog_ast_ex
 		return 0;
 	}
 
-	if (!clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_DOT,p1,p2,NULL))
-		return 0;
-
-	(*expr)->lvalue = 1;
-
-	return 1;
-}
-
-int clog_ast_expression_alloc_builtin_lvalue(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
-{
-	if (!clog_ast_expression_alloc_builtin(parser,expr,type,p1,p2,NULL))
-		return 0;
-
-	(*expr)->lvalue = 1;
-
-	return 1;
+	return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_DOT,p1,p2,NULL);
 }
 
 int clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1)
@@ -688,20 +643,6 @@ int clog_ast_expression_alloc_builtin1(struct clog_parser* parser, struct clog_a
 
 	if (!p1)
 		return 0;
-
-	if (type == CLOG_TOKEN_PLUS || type == CLOG_TOKEN_MINUS)
-	{
-		/* Unary + or - */
-		struct clog_ast_literal* lit_null;
-		if (!clog_ast_literal_alloc(parser,&lit_null,NULL))
-			return 0;
-
-		lit_null->type = clog_ast_literal_integer;
-		if (!clog_ast_expression_alloc_literal(parser,expr,lit_null))
-			return 0;
-
-		return clog_ast_expression_alloc_builtin2(parser,expr,type,*expr,p1);
-	}
 
 	return clog_ast_expression_alloc_builtin(parser,expr,type,p1,NULL,NULL);
 }
@@ -715,6 +656,11 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 		clog_ast_expression_free(parser,p1);
 		clog_ast_expression_free(parser,p2);
 		return 0;
+	}
+
+	switch (type)
+	{
+
 	}
 
 	if (type == CLOG_TOKEN_NOT_EQUALS)
@@ -744,16 +690,6 @@ int clog_ast_expression_alloc_builtin3(struct clog_parser* parser, struct clog_a
 	return clog_ast_expression_alloc_builtin(parser,expr,type,p1,p2,p3);
 }
 
-int clog_ast_expression_alloc_assign(struct clog_parser* parser, struct clog_ast_expression** expr, unsigned int type, struct clog_ast_expression* p1, struct clog_ast_expression* p2)
-{
-	if (!clog_ast_expression_alloc_builtin(parser,expr,type,p1,p2,NULL))
-		return 0;
-
-	(*expr)->lvalue = 1;
-
-	return 1;
-}
-
 int clog_ast_expression_alloc_call(struct clog_parser* parser, struct clog_ast_expression** expr, struct clog_ast_expression* call, struct clog_ast_expression_list* list)
 {
 	*expr = NULL;
@@ -773,8 +709,6 @@ int clog_ast_expression_alloc_call(struct clog_parser* parser, struct clog_ast_e
 	}
 
 	(*expr)->type = clog_ast_expression_call;
-	(*expr)->lvalue = call->lvalue;
-	(*expr)->constant = 0;
 	(*expr)->expr.call = clog_malloc(sizeof(struct clog_ast_expression_call));
 	if (!(*expr)->expr.call)
 	{
@@ -787,130 +721,6 @@ int clog_ast_expression_alloc_call(struct clog_parser* parser, struct clog_ast_e
 
 	(*expr)->expr.call->expr = call;
 	(*expr)->expr.call->params = list;
-
-	return 1;
-}
-
-static int clog_ast_expression_list_check(struct clog_parser* parser, const struct clog_ast_expression_list* list, const struct clog_ast_literal* id, int constant);
-static int clog_ast_expression_check_builtin(struct clog_parser* parser, const struct clog_ast_expression* expr, const struct clog_ast_literal* id, int constant);
-
-static int clog_ast_expression_check(struct clog_parser* parser, const struct clog_ast_expression* expr, const struct clog_ast_literal* id, int constant)
-{
-	if (!expr)
-		return 1;
-
-	switch (expr->type)
-	{
-	case clog_ast_expression_identifier:
-	case clog_ast_expression_literal:
-		return 1;
-
-	case clog_ast_expression_builtin:
-		return clog_ast_expression_check_builtin(parser,expr,id,constant);
-
-	case clog_ast_expression_call:
-		if (!clog_ast_expression_check(parser,expr->expr.call->expr,id,constant))
-			return 0;
-
-		if (!expr->expr.call->expr->lvalue)
-			return clog_syntax_error(parser,"Function call requires an lvalue",clog_ast_expression_line(expr->expr.call->expr));
-
-		return clog_ast_expression_list_check(parser,expr->expr.call->params,id,constant);
-	}
-
-	return 0;
-}
-
-static int clog_ast_expression_check_assign(struct clog_parser* parser, const struct clog_ast_expression* expr, const struct clog_ast_literal* id, int constant)
-{
-	if (!clog_ast_expression_check(parser,expr->expr.builtin->args[0],id,constant) ||
-			!clog_ast_expression_check(parser,expr->expr.builtin->args[1],id,constant))
-	{
-		return 0;
-	}
-
-	if (!expr->expr.builtin->args[0]->lvalue)
-		return clog_syntax_error_token(parser,NULL," requires an lvalue",expr->expr.builtin->type,NULL,clog_ast_expression_line(expr->expr.builtin->args[0]));
-
-	if (clog_ast_literal_id_compare(id,expr->expr.builtin->args[0]->expr.identifier) != 0)
-		return 1;
-
-	if (constant)
-		return clog_syntax_error_token(parser,NULL," applied to constant value",expr->expr.builtin->type,NULL,clog_ast_expression_line(expr->expr.builtin->args[0]));
-
-	return 1;
-}
-
-static int clog_ast_expression_check_boolean(struct clog_parser* parser, const struct clog_ast_expression* expr, const struct clog_ast_literal* id, int constant)
-{
-	return (clog_ast_expression_check(parser,expr->expr.builtin->args[0],id,constant) &&
-			clog_ast_expression_check(parser,expr->expr.builtin->args[1],id,constant) &&
-			clog_ast_expression_check(parser,expr->expr.builtin->args[2],id,constant));
-}
-
-static int clog_ast_expression_check_builtin(struct clog_parser* parser, const struct clog_ast_expression* expr, const struct clog_ast_literal* id, int constant)
-{
-	switch (expr->expr.builtin->type)
-	{
-	case CLOG_TOKEN_DOUBLE_PLUS:
-	case CLOG_TOKEN_DOUBLE_MINUS:
-	case CLOG_TOKEN_ASSIGN:
-	case CLOG_TOKEN_STAR_ASSIGN:
-	case CLOG_TOKEN_SLASH_ASSIGN:
-	case CLOG_TOKEN_PERCENT_ASSIGN:
-	case CLOG_TOKEN_PLUS_ASSIGN:
-	case CLOG_TOKEN_MINUS_ASSIGN:
-	case CLOG_TOKEN_RIGHT_SHIFT_ASSIGN:
-	case CLOG_TOKEN_LEFT_SHIFT_ASSIGN:
-	case CLOG_TOKEN_AMPERSAND_ASSIGN:
-	case CLOG_TOKEN_CARET_ASSIGN:
-	case CLOG_TOKEN_BAR_ASSIGN:
-		return clog_ast_expression_check_assign(parser,expr,id,constant);
-
-	case CLOG_TOKEN_DOT:
-		if (!clog_ast_expression_check(parser,expr->expr.builtin->args[0],id,constant))
-			return 0;
-		if (!expr->expr.builtin->args[0]->lvalue)
-			return clog_syntax_error_token(parser,NULL," requires an lvalue",expr->expr.builtin->type,NULL,clog_ast_expression_line(expr->expr.builtin->args[0]));
-		return 1;
-
-	case CLOG_TOKEN_OPEN_BRACKET:
-		if (!clog_ast_expression_check(parser,expr->expr.builtin->args[0],id,constant))
-			return 0;
-		if (!expr->expr.builtin->args[0]->lvalue)
-			return clog_syntax_error(parser,"Subscript requires an lvalue",clog_ast_expression_line(expr->expr.builtin->args[0]));
-		return clog_ast_expression_check(parser,expr->expr.builtin->args[1],id,constant);
-
-	case CLOG_TOKEN_AND:
-	case CLOG_TOKEN_OR:
-	case CLOG_TOKEN_QUESTION:
-		return clog_ast_expression_check_boolean(parser,expr,id,constant);
-
-	case CLOG_TOKEN_IN:
-		if (!clog_ast_expression_check(parser,expr->expr.builtin->args[0],id,constant) ||
-				!clog_ast_expression_check(parser,expr->expr.builtin->args[1],id,constant))
-		{
-			return 0;
-		}
-		return 1;
-
-	case CLOG_TOKEN_COMMA:
-		if (!clog_ast_expression_check(parser,expr->expr.builtin->args[0],id,constant) ||
-				!clog_ast_expression_check(parser,expr->expr.builtin->args[1],id,constant))
-		{
-			return 0;
-		}
-		return 1;
-
-	default:
-		break;
-	}
-
-	if (!clog_ast_expression_check(parser,expr->expr.builtin->args[0],id,constant) ||
-			!clog_ast_expression_check(parser,expr->expr.builtin->args[1],id,constant))
-	{
-		return 0;
-	}
 
 	return 1;
 }
@@ -979,16 +789,6 @@ int clog_ast_expression_list_append(struct clog_parser* parser, struct clog_ast_
 		list = &(*list)->next;
 
 	return clog_ast_expression_list_alloc(parser,list,expr);
-}
-
-static int clog_ast_expression_list_check(struct clog_parser* parser, const struct clog_ast_expression_list* list, const struct clog_ast_literal* id, int constant)
-{
-	for (;list;list = list->next)
-	{
-		if (!clog_ast_expression_check(parser,list->expr,id,constant))
-			return 0;
-	}
-	return 1;
 }
 
 static void clog_ast_statement_free(struct clog_parser* parser, struct clog_ast_statement* stmt)
@@ -1081,97 +881,14 @@ int clog_ast_statement_list_alloc_expression(struct clog_parser* parser, struct 
 	return 1;
 }
 
-static int clog_ast_statement_list_check_block(struct clog_parser* parser, const struct clog_ast_statement_list* stmt, const struct clog_ast_literal* id, int constant);
-static int clog_ast_statement_list_check_if(struct clog_parser* parser, const struct clog_ast_statement_list* stmt, const struct clog_ast_literal* id, int constant);
-static int clog_ast_statement_list_check_do(struct clog_parser* parser, const struct clog_ast_statement_list* stmt, const struct clog_ast_literal* id, int constant);
-
-static int clog_ast_statement_list_check(struct clog_parser* parser, const struct clog_ast_statement_list* stmt, const struct clog_ast_literal* id, int constant)
+int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* block)
 {
-	/* Reduce each statement */
-	for (;stmt;stmt = stmt->next)
-	{
-		switch (stmt->stmt->type)
-		{
-		case clog_ast_statement_expression:
-			if (!clog_ast_expression_check(parser,stmt->stmt->stmt.expression,id,constant))
-				return 0;
+	struct clog_ast_statement_list* l = NULL;
 
-			if (stmt->stmt->stmt.expression->type == clog_ast_expression_builtin &&
-					stmt->stmt->stmt.expression->expr.builtin->type == CLOG_TOKEN_COMMA)
-			{
-				if (stmt->stmt->stmt.expression->expr.builtin->args[0]->constant)
-					printf("Statement has no effect at line %lu\n",clog_ast_expression_line(stmt->stmt->stmt.expression->expr.builtin->args[0]));
-				else if (stmt->stmt->stmt.expression->expr.builtin->args[1]->constant)
-					printf("Statement has no effect at line %lu\n",clog_ast_expression_line(stmt->stmt->stmt.expression->expr.builtin->args[1]));
-			}
-			else if (stmt->stmt->stmt.expression->constant)
-				printf("Statement has no effect at line %lu\n",clog_ast_expression_line(stmt->stmt->stmt.expression));
+	*list = NULL;
 
-			break;
-
-		case clog_ast_statement_block:
-			if (!clog_ast_statement_list_check_block(parser,stmt->stmt->stmt.block,id,constant))
-				return 0;
-			break;
-
-		case clog_ast_statement_declaration:
-		case clog_ast_statement_constant:
-			/* Check if new variable hides the one we are reducing */
-			if (clog_ast_literal_id_compare(id,stmt->stmt->stmt.declaration) == 0)
-			{
-				int ret = 1;
-				int old_constant = constant;
-
-				constant = (stmt->stmt->type == clog_ast_statement_constant);
-
-				/* Check the assignment expression that follows */
-				if (!clog_ast_expression_check(parser,stmt->next->stmt->stmt.expression->expr.builtin->args[1],id,constant))
-					return 0;
-
-				ret = clog_ast_statement_list_check(parser,stmt->next->next,id,constant);
-
-				constant = old_constant;
-				return ret;
-			}
-			break;
-
-		case clog_ast_statement_if:
-			if (!clog_ast_statement_list_check_if(parser,stmt,id,constant))
-				return 0;
-			break;
-
-		case clog_ast_statement_do:
-			if (!clog_ast_statement_list_check_do(parser,stmt,id,constant))
-				return 0;
-			break;
-
-		case clog_ast_statement_return:
-			if (!clog_ast_expression_check(parser,stmt->stmt->stmt.expression,id,constant))
-				return 0;
-
-			/* Anything after return is unreachable... */
-			if (stmt->next)
-				printf("Unreachable code at line %lu\n",clog_ast_expression_line(stmt->next->stmt->stmt.expression));
-			return 1;
-
-		case clog_ast_statement_break:
-		case clog_ast_statement_continue:
-			/* Anything after break or continue is unreachable... */
-			if (stmt->next)
-				printf("Unreachable code at line %lu\n",clog_ast_expression_line(stmt->next->stmt->stmt.expression));
-			return 1;
-		}
-	}
-
-	return 1;
-}
-
-static int clog_ast_statement_list_check_block(struct clog_parser* parser, const struct clog_ast_statement_list* block, const struct clog_ast_literal* id, int constant)
-{
-	const struct clog_ast_statement_list* l;
-
-	if (!clog_ast_statement_list_check(parser,block,id,constant))
-		return 0;
+	if (!block)
+		return 1;
 
 	/* Check for duplicate declarations first */
 	for (l = block;l;l = l->next)
@@ -1186,60 +903,13 @@ static int clog_ast_statement_list_check_block(struct clog_parser* parser, const
 						l2->stmt->type == clog_ast_statement_constant)
 				{
 					if (clog_ast_literal_id_compare(l->stmt->stmt.declaration,l2->stmt->stmt.declaration) == 0)
+					{
+						clog_ast_statement_list_free(parser,block);
 						return clog_syntax_error(parser,"Variable already declared",l2->stmt->stmt.declaration->line);
+					}
 				}
 			}
 		}
-	}
-
-	/* Now reduce the block with each declared variable */
-	for (;block;block = block->next)
-	{
-		if (block->stmt->type == clog_ast_statement_declaration || block->stmt->type == clog_ast_statement_constant)
-		{
-			/* Declaration is always followed by an assign */
-			const struct clog_ast_literal* new_id = block->stmt->stmt.declaration;
-			int new_constant = (block->stmt->type == clog_ast_statement_constant);
-
-			/* Reduce the assignment expression that follows */
-			if (!clog_ast_expression_check(parser,block->next->stmt->stmt.expression->expr.builtin->args[1],id,constant))
-				return 0;
-
-			if (!clog_ast_statement_list_check(parser,block->next->next,new_id,new_constant))
-				return 0;
-
-			block = block->next;
-		}
-	}
-
-	return 1;
-}
-
-static int clog_ast_statement_list_check_if(struct clog_parser* parser, const struct clog_ast_statement_list* if_stmt, const struct clog_ast_literal* id, int constant)
-{
-	return (clog_ast_expression_check(parser,if_stmt->stmt->stmt.if_stmt->condition,id,constant) &&
-			clog_ast_statement_list_check(parser,if_stmt->stmt->stmt.if_stmt->true_stmt,id,constant) &&
-			clog_ast_statement_list_check(parser,if_stmt->stmt->stmt.if_stmt->false_stmt,id,constant));
-}
-
-static int clog_ast_statement_list_check_do(struct clog_parser* parser, const struct clog_ast_statement_list* do_stmt, const struct clog_ast_literal* id, int constant)
-{
-	return (clog_ast_expression_check(parser,do_stmt->stmt->stmt.do_stmt->condition,id,constant) &&
-				clog_ast_statement_list_check(parser,do_stmt->stmt->stmt.do_stmt->loop_stmt,id,constant));
-}
-
-int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* block)
-{
-	*list = NULL;
-
-	if (!block)
-		return 1;
-
-	/* Check the block */
-	if (!clog_ast_statement_list_check_block(parser,block,NULL,0))
-	{
-		clog_ast_statement_list_free(parser,block);
-		return 0;
 	}
 
 	/* Now reduce the block */
@@ -1253,13 +923,6 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 
 		if (!block)
 			return 1;
-
-		/* Check the block (again) */
-		if (!clog_ast_statement_list_check_block(parser,block,NULL,0))
-		{
-			clog_ast_statement_list_free(parser,block);
-			return 0;
-		}
 	}
 
 	/* Check for block containing only 1 block */
@@ -1356,7 +1019,7 @@ int clog_ast_statement_list_alloc_declaration(struct clog_parser* parser, struct
 		return 0;
 	}
 
-	if (!clog_ast_expression_alloc_assign(parser,&assign_expr,CLOG_TOKEN_ASSIGN,id_expr,init))
+	if (!clog_ast_expression_alloc_builtin2(parser,&assign_expr,CLOG_TOKEN_ASSIGN,id_expr,init))
 	{
 		clog_ast_statement_list_free(parser,*list);
 		*list = NULL;
@@ -1731,19 +1394,13 @@ static void __dump_expr(const struct clog_ast_expression* expr)
 		switch (expr->expr.builtin->type)
 		{
 		case CLOG_TOKEN_DOUBLE_PLUS:
-			if (expr->lvalue)
-				printf("++");
+			printf("++");
 			__dump_expr_b(expr->expr.builtin->args[0]);
-			if (!expr->lvalue)
-				printf("++");
 			break;
 
 		case CLOG_TOKEN_DOUBLE_MINUS:
-			if (expr->lvalue)
-				printf("++");
+			printf("--");
 			__dump_expr_b(expr->expr.builtin->args[0]);
-			if (!expr->lvalue)
-				printf("++");
 			break;
 
 		case CLOG_TOKEN_QUESTION:
