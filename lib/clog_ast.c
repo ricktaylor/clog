@@ -1929,15 +1929,33 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		return 0;
 	}
 
-	/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
-	if (true_stmt)
+	/* If we have no result statements replace with condition */
+	if (!true_stmt && !false_stmt)
 	{
-		if (!clog_ast_statement_list_alloc_block(parser,&true_stmt,true_stmt))
+		*list = cond;
+		return 1;
+	}
+
+	/* If we have no true_stmt, negate the condition and swap */
+	if (!true_stmt)
+	{
+		if (!clog_ast_expression_alloc_builtin1(parser,&cond->stmt->stmt.expression,CLOG_TOKEN_EXCLAMATION,cond->stmt->stmt.expression))
 		{
 			clog_ast_statement_list_free(parser,cond);
 			clog_ast_statement_list_free(parser,false_stmt);
 			return 0;
 		}
+
+		true_stmt = false_stmt;
+		false_stmt = NULL;
+	}
+
+	/* Rewrite to force compound statements: if (x) var i;  =>  if (x) { var i; } */
+	if (!clog_ast_statement_list_alloc_block(parser,&true_stmt,true_stmt))
+	{
+		clog_ast_statement_list_free(parser,cond);
+		clog_ast_statement_list_free(parser,false_stmt);
+		return 0;
 	}
 	if (false_stmt)
 	{
@@ -1956,25 +1974,22 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		struct clog_ast_statement_list* cond2;
 
 		/* We must check to see if an identical declaration occurs in the outermost block of true_stmt and false_stmt */
-		if (true_stmt)
+		struct clog_ast_variable* v = true_stmt->stmt->stmt.block->locals;
+		for (;v;v = v->next)
 		{
-			struct clog_ast_variable* v = true_stmt->stmt->stmt.block->locals;
-			for (;v;v = v->next)
+			if (clog_ast_string_compare(&v->id,&cond->stmt->stmt.declaration->value.string) == 0)
 			{
-				if (clog_ast_string_compare(&v->id,&cond->stmt->stmt.declaration->value.string) == 0)
-				{
-					unsigned long line = cond->stmt->stmt.declaration->line;
-					clog_ast_statement_list_free(parser,cond);
-					clog_ast_statement_list_free(parser,true_stmt);
-					clog_ast_statement_list_free(parser,false_stmt);
-					return clog_syntax_error(parser,"Variable already declared",line);
-				}
+				unsigned long line = cond->stmt->stmt.declaration->line;
+				clog_ast_statement_list_free(parser,cond);
+				clog_ast_statement_list_free(parser,true_stmt);
+				clog_ast_statement_list_free(parser,false_stmt);
+				return clog_syntax_error(parser,"Variable already declared",line);
 			}
 		}
+
 		if (false_stmt)
 		{
-			struct clog_ast_variable* v = false_stmt->stmt->stmt.block->locals;
-			for (;v;v = v->next)
+			for (v = false_stmt->stmt->stmt.block->locals;v;v = v->next)
 			{
 				if (clog_ast_string_compare(&v->id,&cond->stmt->stmt.declaration->value.string) == 0)
 				{
@@ -2023,13 +2038,9 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 	cond->stmt->stmt.expression = NULL;
 	clog_ast_statement_list_free(parser,cond);
 
-	(*list)->stmt->stmt.if_stmt->true_block = NULL;
-	if (true_stmt)
-	{
-		(*list)->stmt->stmt.if_stmt->true_block = true_stmt->stmt->stmt.block;
-		true_stmt->stmt->stmt.block = NULL;
-		clog_ast_statement_list_free(parser,true_stmt);
-	}
+	(*list)->stmt->stmt.if_stmt->true_block = true_stmt->stmt->stmt.block;
+	true_stmt->stmt->stmt.block = NULL;
+	clog_ast_statement_list_free(parser,true_stmt);
 
 	(*list)->stmt->stmt.if_stmt->false_block = NULL;
 	if (false_stmt)
@@ -2452,7 +2463,7 @@ static void __dump(size_t indent, const struct clog_ast_statement_list* list)
 
 
 
-int clog_codegen(const struct clog_ast_statement_list* list);
+int clog_cfg_construct(const struct clog_ast_block* ast_block);
 
 /* External functions defined by ragel and lemon */
 int clog_tokenize(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_param, struct clog_parser* parser, void* lemon);
@@ -2486,7 +2497,7 @@ int clog_parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_
 	{
 		printf("Success!\n");
 
-		/*clog_codegen(parser.pgm);*/
+		clog_cfg_construct(parser.pgm->stmt->stmt.block);
 	}
 
 	clog_ast_statement_list_free(&parser,parser.pgm);
