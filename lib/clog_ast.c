@@ -872,15 +872,6 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 {
 	*expr = NULL;
 
-	if (type == CLOG_TOKEN_NOT_EQUALS)
-	{
-		struct clog_ast_expression* e;
-		if (!clog_ast_expression_alloc_builtin2(parser,&e,CLOG_TOKEN_EQUALS,p1,p2))
-			return 0;
-
-		return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_EXCLAMATION,e,NULL,NULL);
-	}
-
 	if (type == CLOG_TOKEN_DOUBLE_PLUS || type == CLOG_TOKEN_DOUBLE_MINUS)
 	{
 		if (!p2)
@@ -972,6 +963,7 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 			return 1;
 
 		case CLOG_TOKEN_EQUALS:
+		case CLOG_TOKEN_NOT_EQUALS:
 		case CLOG_TOKEN_LESS_THAN:
 		case CLOG_TOKEN_GREATER_THAN:
 		case CLOG_TOKEN_LESS_THAN_EQUALS:
@@ -1021,7 +1013,9 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 
 				clog_ast_expression_free(parser,p2);
 
-				if (type == CLOG_TOKEN_LESS_THAN)
+				if (type == CLOG_TOKEN_NOT_EQUALS)
+					p1->expr.literal->value.integer = (cmp ? 0 : 1);
+				else if (type == CLOG_TOKEN_LESS_THAN)
 					p1->expr.literal->value.integer = (cmp < 0 ? 1 : 0);
 				else if (type == CLOG_TOKEN_LESS_THAN_EQUALS)
 					p1->expr.literal->value.integer = (cmp <= 0 ? 1 : 0);
@@ -1036,7 +1030,9 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 				*expr = p1;
 				return 1;
 			}
-			if (type == CLOG_TOKEN_LESS_THAN)
+			if (type == CLOG_TOKEN_NOT_EQUALS)
+				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_LESS_THAN,p2,p1,NULL);
+			else if (type == CLOG_TOKEN_LESS_THAN)
 				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_GREATER_THAN_EQUALS,p2,p1,NULL);
 			else if (type == CLOG_TOKEN_LESS_THAN_EQUALS)
 				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_GREATER_THAN,p2,p1,NULL);
