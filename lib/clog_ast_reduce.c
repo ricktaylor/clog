@@ -15,7 +15,6 @@ struct clog_ast_reduction
 	const struct clog_ast_literal* id;
 	struct clog_ast_literal* value;
 	struct clog_ast_expression** init_expr;
-	int constant;
 	int reduced;
 	int referenced;
 };
@@ -67,56 +66,6 @@ static void clog_ast_literal_bool_promote(struct clog_ast_literal* lit)
 		}
 		lit->type = clog_ast_literal_bool;
 	}
-}
-
-static int clog_ast_literal_int_promote(struct clog_ast_literal* lit)
-{
-	if (!lit)
-		return 0;
-
-	switch (lit->type)
-	{
-	case clog_ast_literal_null:
-	case clog_ast_literal_bool:
-	case clog_ast_literal_integer:
-		lit->type = clog_ast_literal_integer;
-		return 1;
-
-	default:
-		return 0;
-	}
-}
-
-static int clog_ast_literal_real_promote(struct clog_ast_literal* lit)
-{
-	if (!lit)
-		return 0;
-
-	if (lit->type == clog_ast_literal_real)
-		return 1;
-
-	if (clog_ast_literal_int_promote(lit))
-	{
-		double v = lit->value.integer;
-		lit->value.real = v;
-		lit->type = clog_ast_literal_real;
-		return 1;
-	}
-	return 0;
-}
-
-int clog_ast_literal_arith_convert(struct clog_ast_literal* lit1, struct clog_ast_literal* lit2)
-{
-	if (!lit1 || !lit2)
-		return 0;
-	else if (lit1->type == clog_ast_literal_real && clog_ast_literal_real_promote(lit2))
-		return 1;
-	else if (lit2->type == clog_ast_literal_real &&	clog_ast_literal_real_promote(lit1))
-		return 1;
-	else if (clog_ast_literal_int_promote(lit1) && clog_ast_literal_int_promote(lit2))
-		return 1;
-
-	return 0;
 }
 
 static int clog_ast_literal_add(struct clog_parser* parser, struct clog_ast_literal* p1, struct clog_ast_literal* p2)
@@ -747,8 +696,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	case CLOG_TOKEN_PLUS:
 		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
 			goto replace_with_p1;
-		if (p2 && p2->type == clog_ast_literal_real && p2->value.real != p2->value.real) /* NaN */
-			goto replace_with_p2;
 		if (p1 && p2)
 		{
 			int ret = clog_ast_literal_add(parser,p1,p2);
@@ -756,11 +703,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 				goto failed;
 			if (ret == 2)
 				goto replace_with_p1;
-		}
-		if (!p2 && p1)
-		{
-			p2 = p1;
-			p1 = NULL;
 		}
 		if (p2)
 		{
@@ -785,8 +727,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	case CLOG_TOKEN_MINUS:
 		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
 			goto replace_with_p1;
-		if (p2 && p2->type == clog_ast_literal_real && p2->value.real != p2->value.real) /* NaN */
-			goto replace_with_p2;
 		if (p1 && p2)
 		{
 			if (!clog_ast_literal_arith_convert(p1,p2))
@@ -824,8 +764,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	case CLOG_TOKEN_STAR:
 		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
 			goto replace_with_p1;
-		if (p2 && p2->type == clog_ast_literal_real && p2->value.real != p2->value.real) /* NaN */
-			goto replace_with_p2;
 		if (p1 && p2)
 		{
 			if (!clog_ast_literal_arith_convert(p1,p2))
@@ -838,11 +776,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 			else
 				p1->value.integer *= p2->value.integer;
 			goto replace_with_p1;
-		}
-		if (p1 && !p2)
-		{
-			p2 = p1;
-			p1 = NULL;
 		}
 		if (p2)
 		{
@@ -871,8 +804,6 @@ static int clog_ast_expression_reduce_builtin(struct clog_parser* parser, struct
 	case CLOG_TOKEN_SLASH:
 		if (p1 && p1->type == clog_ast_literal_real && p1->value.real != p1->value.real) /* NaN */
 			goto replace_with_p1;
-		if (p2 && p2->type == clog_ast_literal_real && p2->value.real != p2->value.real) /* NaN */
-			goto replace_with_p2;
 		if (p1 && p2)
 		{
 			if (!clog_ast_literal_arith_convert(p1,p2))
@@ -1133,12 +1064,7 @@ static int clog_ast_expression_list_reduce(struct clog_parser* parser, struct cl
 		if (list->expr->type == clog_ast_expression_identifier)
 		{
 			if (clog_ast_literal_id_compare(reduction->id,list->expr->expr.identifier) == 0)
-			{
-				if (reduction->constant)
-					return clog_ast_expression_reduce(parser,&list->expr,reduction);
-
 				reduction->referenced = 1;
-			}
 		}
 		else if (!clog_ast_expression_reduce(parser,&list->expr,reduction))
 			return 0;
@@ -1217,7 +1143,6 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 			break;
 
 		case clog_ast_statement_declaration:
-		case clog_ast_statement_constant:
 			/* Rewrite comma expressions as statements before the declaration */
 			if ((*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]->type == clog_ast_expression_builtin &&
 					(*stmt)->next->stmt->stmt.expression->expr.builtin->args[1]->expr.builtin->type == CLOG_TOKEN_COMMA)
@@ -1246,9 +1171,6 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 			{
 				int ret = 1;
 				struct clog_ast_literal* old_value = reduction->value;
-				int old_constant = reduction->constant;
-
-				reduction->constant = ((*stmt)->stmt->type == clog_ast_statement_constant);
 
 				/* Reduce the assignment expression that follows */
 				if (!clog_ast_expression_reduce(parser,&(*stmt)->next->stmt->stmt.expression->expr.builtin->args[1],reduction))
@@ -1260,7 +1182,6 @@ static int clog_ast_statement_list_reduce(struct clog_parser* parser, struct clo
 
 				clog_ast_literal_free(parser,reduction->value);
 				reduction->value = old_value;
-				reduction->constant = old_constant;
 				return ret;
 			}
 			break;
@@ -1328,7 +1249,7 @@ static void clog_ast_statement_list_flatten(struct clog_parser* parser, struct c
 		struct clog_ast_statement_list* find = (*list)->stmt->stmt.block;
 		for (;find;find = find->next)
 		{
-			if (find->stmt->type == clog_ast_statement_declaration || find->stmt->type == clog_ast_statement_constant)
+			if (find->stmt->type == clog_ast_statement_declaration)
 				break;
 		}
 
@@ -1363,14 +1284,13 @@ static int clog_ast_statement_list_reduce_block(struct clog_parser* parser, stru
 		/* Now reduce the block with each declared variable */
 		for (l = block;*l;)
 		{
-			if ((*l)->stmt->type == clog_ast_statement_declaration || (*l)->stmt->type == clog_ast_statement_constant)
+			if ((*l)->stmt->type == clog_ast_statement_declaration)
 			{
 				struct clog_ast_reduction reduction2 = {0};
 				int ret;
 
 				/* Declaration is always followed by an assign */
 				reduction2.id = (*l)->stmt->stmt.declaration;
-				reduction2.constant = ((*l)->stmt->type == clog_ast_statement_constant);
 
 				/* Reduce the assignment expression that follows */
 				if (!clog_ast_expression_reduce(parser,&(*l)->next->stmt->stmt.expression->expr.builtin->args[1],reduction))

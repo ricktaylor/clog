@@ -83,11 +83,22 @@ int clog_ast_literal_id_compare(const struct clog_ast_literal* lit1, const struc
 
 struct clog_ast_expression_list;
 
+struct clog_ast_variable
+{
+	struct clog_string id;
+	int assigned;
+	int constant;
+
+	struct clog_ast_variable* up;
+	struct clog_ast_variable* next;
+};
+
 struct clog_ast_expression
 {
 	enum
 	{
 		clog_ast_expression_identifier,
+		clog_ast_expression_variable,
 		clog_ast_expression_literal,
 		clog_ast_expression_builtin,
 		clog_ast_expression_call,
@@ -97,6 +108,7 @@ struct clog_ast_expression
 	{
 		struct clog_ast_literal* literal;
 		struct clog_ast_literal* identifier;
+		struct clog_ast_variable* variable;
 
 		struct clog_ast_expression_builtin
 		{
@@ -135,6 +147,13 @@ void clog_ast_expression_list_free(struct clog_parser* parser, struct clog_ast_e
 int clog_ast_expression_list_alloc(struct clog_parser* parser, struct clog_ast_expression_list** list, struct clog_ast_expression* expr);
 int clog_ast_expression_list_append(struct clog_parser* parser, struct clog_ast_expression_list** list, struct clog_ast_expression* expr);
 
+struct clog_ast_block
+{
+	struct clog_ast_variable* locals;
+	struct clog_ast_variable* externs;
+	struct clog_ast_statement_list* stmts;
+};
+
 struct clog_ast_statement
 {
 	enum clog_ast_statement_type
@@ -153,20 +172,20 @@ struct clog_ast_statement
 	union clog_ast_statement_u
 	{
 		struct clog_ast_expression* expression;
-		struct clog_ast_statement_list* block;
+		struct clog_ast_block* block;
 		struct clog_ast_literal* declaration;
 
 		struct clog_ast_statement_if
 		{
 			struct clog_ast_expression* condition;
-			struct clog_ast_statement_list* true_stmt;
-			struct clog_ast_statement_list* false_stmt;
+			struct clog_ast_block* true_block;
+			struct clog_ast_block* false_block;
 		}* if_stmt;
 
 		struct clog_ast_statement_do
 		{
 			struct clog_ast_expression* condition;
-			struct clog_ast_statement_list* loop_stmt;
+			struct clog_ast_block* loop_block;
 		}* do_stmt;
 	} stmt;
 };
