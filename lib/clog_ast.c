@@ -1688,13 +1688,13 @@ static int clog_ast_bind_block(struct clog_parser* parser, struct clog_ast_block
 
 static int clog_ast_bind(struct clog_parser* parser, struct clog_ast_block* block)
 {
-	struct clog_ast_statement_list* l = block->stmts;
-	for (;l;l = l->next)
+	struct clog_ast_statement_list** l = &block->stmts;
+	while (*l)
 	{
-		switch (l->stmt->type)
+		switch ((*l)->stmt->type)
 		{
 		case clog_ast_statement_expression:
-			if (!clog_ast_bind_expression(parser,block,l->stmt->stmt.expression,0))
+			if (!clog_ast_bind_expression(parser,block,(*l)->stmt->stmt.expression,0))
 				return 0;
 			break;
 
@@ -1704,45 +1704,50 @@ static int clog_ast_bind(struct clog_parser* parser, struct clog_ast_block* bloc
 				struct clog_ast_variable* var;
 
 				/* Next statement is the initialiser, bind it first */
-				if (!clog_ast_bind_expression(parser,block,l->next->stmt->stmt.expression->expr.builtin->args[1],0))
+				if (!clog_ast_bind_expression(parser,block,(*l)->next->stmt->stmt.expression->expr.builtin->args[1],0))
 					return 0;
 
 				/* Search for a duplicate */
 				for (var = block->locals;var;var = var->next)
 				{
-					if (clog_ast_string_compare(&var->id,&l->stmt->stmt.declaration->value.string) == 0)
-						return clog_syntax_error(parser,"Variable already declared",l->stmt->stmt.declaration->line);
+					if (clog_ast_string_compare(&var->id,&(*l)->stmt->stmt.declaration->value.string) == 0)
+						return clog_syntax_error(parser,"Variable already declared",(*l)->stmt->stmt.declaration->line);
 				}
 
 				/* Add to the block's locals */
-				if (!clog_ast_variable_alloc(parser,&var,&l->stmt->stmt.declaration->value.string))
+				if (!clog_ast_variable_alloc(parser,&var,&(*l)->stmt->stmt.declaration->value.string))
 					return 0;
 
-				var->constant = (l->stmt->type == clog_ast_statement_constant ? 1 : 0);
+				var->constant = ((*l)->stmt->type == clog_ast_statement_constant ? 1 : 0);
 				var->next = block->locals;
 				block->locals = var;
 
-				l = l->next;
+				{
+					struct clog_ast_statement_list* n = (*l)->next;
+					(*l)->next = NULL;
+					clog_ast_statement_list_free(parser,*l);
+					*l = n;
+				}
 			}
 			break;
 
 		case clog_ast_statement_block:
-			if (!clog_ast_bind_block(parser,block,l->stmt->stmt.block))
+			if (!clog_ast_bind_block(parser,block,(*l)->stmt->stmt.block))
 				return 0;
 			break;
 
 		case clog_ast_statement_if:
-			if (!clog_ast_bind_expression(parser,block,l->stmt->stmt.if_stmt->condition,0) ||
-					!clog_ast_bind_block(parser,block,l->stmt->stmt.if_stmt->true_block) ||
-					!clog_ast_bind_block(parser,block,l->stmt->stmt.if_stmt->false_block))
+			if (!clog_ast_bind_expression(parser,block,(*l)->stmt->stmt.if_stmt->condition,0) ||
+					!clog_ast_bind_block(parser,block,(*l)->stmt->stmt.if_stmt->true_block) ||
+					!clog_ast_bind_block(parser,block,(*l)->stmt->stmt.if_stmt->false_block))
 			{
 				return 0;
 			}
 			break;
 
 		case clog_ast_statement_do:
-			if (!clog_ast_bind_block(parser,block,l->stmt->stmt.do_stmt->loop_block) ||
-					!clog_ast_bind_expression(parser,block,l->stmt->stmt.do_stmt->condition,0))
+			if (!clog_ast_bind_block(parser,block,(*l)->stmt->stmt.do_stmt->loop_block) ||
+					!clog_ast_bind_expression(parser,block,(*l)->stmt->stmt.do_stmt->condition,0))
 			{
 				return 0;
 			}
@@ -1750,26 +1755,26 @@ static int clog_ast_bind(struct clog_parser* parser, struct clog_ast_block* bloc
 
 		case clog_ast_statement_break:
 		case clog_ast_statement_continue:
-			if (l->next)
+			if ((*l)->next)
 			{
-				clog_syntax_error(parser,"Warning: Unreachable code",l->stmt->stmt.expression->expr.literal->line);
-				clog_ast_statement_list_free(parser,l->next);
-				l->next = NULL;
+				clog_syntax_error(parser,"Warning: Unreachable code",(*l)->stmt->stmt.expression->expr.literal->line);
+				clog_ast_statement_list_free(parser,(*l)->next);
 			}
-			break;
+			return 1;
 
 		case clog_ast_statement_return:
-			if (!clog_ast_bind_expression(parser,block,l->stmt->stmt.expression,0))
+			if (!clog_ast_bind_expression(parser,block,(*l)->stmt->stmt.expression,0))
 				return 0;
 
-			if (l->next)
+			if ((*l)->next)
 			{
-				clog_syntax_error(parser,"Warning: Unreachable code",l->stmt->stmt.expression->expr.literal->line);
-				clog_ast_statement_list_free(parser,l->next);
-				l->next = NULL;
+				clog_syntax_error(parser,"Warning: Unreachable code",(*l)->stmt->stmt.expression->expr.literal->line);
+				clog_ast_statement_list_free(parser,(*l)->next);
 			}
-			break;
+			return 1;
 		}
+
+		l = &(*l)->next;
 	}
 
 	return 1;
