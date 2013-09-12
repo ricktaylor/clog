@@ -62,6 +62,37 @@ static struct clog_cfg_block* clog_cfg_construct_expression(struct clog_cfg_bloc
 	return block;
 }
 
+static struct clog_cfg_block* clog_cfg_append_fallthru(struct clog_cfg_block* block)
+{
+	if (!block->fallthru && !clog_cfg_alloc_block(block,&block->fallthru))
+		return NULL;
+
+	return block->fallthru;
+}
+
+static struct clog_cfg_block* clog_cfg_insert_fallthru(struct clog_cfg_block* block)
+{
+	struct clog_cfg_block* fallthru = block->fallthru;
+	if (!clog_cfg_alloc_block(block,&block->fallthru))
+		return NULL;
+
+	block->fallthru->fallthru = fallthru;
+	return block->fallthru;
+}
+
+static struct clog_cfg_block* clog_cfg_insert_branch(struct clog_cfg_block* block)
+{
+	struct clog_cfg_block* branch = block->branch;
+	if (!clog_cfg_alloc_block(block,&block->branch))
+		return NULL;
+
+	block->branch->fallthru = block->fallthru;
+	++block->fallthru->refcount;
+
+	block->branch->branch = branch;
+	return block->branch;
+}
+
 static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block* block, const struct clog_ast_expression* ast_expr)
 {
 	switch (ast_expr->type)
@@ -89,8 +120,38 @@ static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block
 			break;
 
 		case CLOG_TOKEN_OR:
+			{
+				struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
+				struct clog_cfg_block* or_case = clog_cfg_insert_fallthru(block);
+				if (!fallthru || !or_case)
+					return NULL;
+
+				or_case->branch = block->branch;
+				++block->branch->refcount;
+
+				if (!clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[0]) ||
+						!clog_cfg_construct_condition(or_case,ast_expr->expr.builtin->args[1]))
+				{
+					return NULL;
+				}
+				return fallthru;
+			}
 
 		case CLOG_TOKEN_AND:
+			{
+				struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
+				struct clog_cfg_block* and_case = clog_cfg_insert_branch(block);
+
+				if (!fallthru || !and_case)
+					return NULL;
+
+				if (!clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[0]) ||
+						!clog_cfg_construct_condition(and_case,ast_expr->expr.builtin->args[1]))
+				{
+					return NULL;
+				}
+				return fallthru;
+			}
 
 		case CLOG_TOKEN_EQUALS:
 		case CLOG_TOKEN_NOT_EQUALS:
@@ -110,53 +171,25 @@ static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block
 
 static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* block, const struct clog_ast_block* ast_block);
 
-static struct clog_cfg_block* clog_cfg_add_fallthru(struct clog_cfg_block* block)
-{
-	if (!block->fallthru && !clog_cfg_alloc_block(block,&block->fallthru))
-		return NULL;
-
-	return block->fallthru;
-}
-
-static struct clog_cfg_block* clog_cfg_insert_block(struct clog_cfg_block* block)
-{
-	struct clog_cfg_block* fallthru = block->fallthru;
-	if (!clog_cfg_alloc_block(block,&block->fallthru))
-	{
-		block->fallthru = fallthru;
-		return NULL;
-	}
-
-	block->fallthru->fallthru = fallthru;
-	return block->fallthru;
-}
-
 static struct clog_cfg_block* clog_cfg_construct_if(struct clog_cfg_block* block, const struct clog_ast_statement_if* ast_if)
 {
-	/* First create diamond shaped graph */
-	struct clog_cfg_block* fallthru = clog_cfg_add_fallthru(block);
-	if (!fallthru)
+	struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
+	struct clog_cfg_block* branch = clog_cfg_insert_branch(block);
+
+	if (!fallthru || !branch)
 		return NULL;
 
-	/* Insert true branch */
-	if (!clog_cfg_alloc_block(block,&block->branch))
+	if (ast_if->false_block && !(fallthru = clog_cfg_insert_fallthru(block)))
 		return NULL;
 
-	block->branch->fallthru = fallthru;
-	++fallthru->refcount;
-
-	if (ast_if->false_block && !clog_cfg_insert_block(block))
-		return NULL;
-
-	/* Now fill in the blocks */
 	if (!clog_cfg_construct_condition(block,ast_if->condition))
 		return NULL;
 
-	if (!clog_cfg_construct_block(block->branch,ast_if->true_block))
+	if (!clog_cfg_construct_block(branch,ast_if->true_block))
 		return NULL;
 
-	if (ast_if->false_block && !clog_cfg_construct_block(block->fallthru,ast_if->false_block))
-		return NULL;
+	if (ast_if->false_block)
+		return clog_cfg_construct_block(fallthru,ast_if->false_block);
 
 	return fallthru;
 }
@@ -166,11 +199,8 @@ static struct clog_cfg_block* clog_cfg_construct_do(struct clog_cfg_block* block
 	struct clog_cfg_block* loop_body;
 	struct clog_cfg_block* condition;
 
-	if (!clog_cfg_add_fallthru(block))
-		return NULL;
-
-	loop_body = clog_cfg_insert_block(block);
-	condition = clog_cfg_insert_block(loop_body);
+	loop_body = clog_cfg_insert_fallthru(block);
+	condition = clog_cfg_insert_fallthru(loop_body);
 	if (!loop_body || !condition)
 		return NULL;
 
@@ -192,7 +222,7 @@ static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* bl
 		{
 		case clog_ast_statement_declaration:
 		case clog_ast_statement_constant:
-			/* These have been dropped */
+			/* These should have been dropped */
 			break;
 
 		case clog_ast_statement_expression:
@@ -225,7 +255,7 @@ static void __dump(struct clog_cfg_block* block)
 {
 	if (block)
 	{
-		printf("%u:\n",block->gen);
+		printf("%u: (ref: %u)\n",block->gen,block->refcount);
 
 		if (block->branch)
 			printf("  IF goto %u\n",block->branch->gen);
@@ -233,7 +263,7 @@ static void __dump(struct clog_cfg_block* block)
 		if (block->fallthru)
 			printf("  goto %u\n",block->fallthru->gen);
 		else
-			printf("END\n");
+			printf("  END\n");
 
 		__dump(block->a_next);
 	}
