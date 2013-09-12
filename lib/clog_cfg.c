@@ -213,6 +213,38 @@ static struct clog_cfg_block* clog_cfg_construct_do(struct clog_cfg_block* block
 	return clog_cfg_construct_condition(condition,ast_do->condition);
 }
 
+static struct clog_cfg_block* clog_cfg_construct_while(struct clog_cfg_block* block, const struct clog_ast_statement_while* ast_while)
+{
+	struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
+	struct clog_cfg_block* header = clog_cfg_insert_fallthru(block);
+	struct clog_cfg_block* branch;
+
+	if (!fallthru)
+		return NULL;
+
+	if (ast_while->pre)
+	{
+		const struct clog_ast_statement_list* list = ast_while->pre;
+		for (;list && header;list = list->next)
+			header = clog_cfg_construct_expression(header,list->stmt->stmt.expression);
+	}
+
+	if (!header || !clog_cfg_alloc_block(header,&header->branch))
+		return NULL;
+
+	branch = header->branch;
+	branch->fallthru = header;
+	++header->refcount;
+
+	if (!clog_cfg_construct_condition(header,ast_while->condition))
+		return NULL;
+
+	if (!clog_cfg_construct_block(branch,ast_while->loop_block))
+		return NULL;
+
+	return fallthru;
+}
+
 static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* block, const struct clog_ast_block* ast_block)
 {
 	const struct clog_ast_statement_list* list = ast_block->stmts;
@@ -239,6 +271,10 @@ static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* bl
 
 		case clog_ast_statement_do:
 			block = clog_cfg_construct_do(block,list->stmt->stmt.do_stmt);
+			break;
+
+		case clog_ast_statement_while:
+			block = clog_cfg_construct_while(block,list->stmt->stmt.while_stmt);
 			break;
 
 		case clog_ast_statement_break:

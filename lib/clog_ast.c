@@ -1439,6 +1439,13 @@ static void clog_ast_statement_free(struct clog_parser* parser, struct clog_ast_
 			clog_ast_statement_free_block(parser,stmt->stmt.do_stmt->loop_block);
 			clog_free(stmt->stmt.do_stmt);
 			break;
+
+		case clog_ast_statement_while:
+			clog_ast_expression_free(parser,stmt->stmt.while_stmt->condition);
+			clog_ast_statement_free_block(parser,stmt->stmt.while_stmt->loop_block);
+			clog_ast_statement_list_free(parser,stmt->stmt.while_stmt->pre);
+			clog_free(stmt->stmt.while_stmt);
+			break;
 		}
 
 		clog_free(stmt);
@@ -1682,9 +1689,8 @@ static int clog_ast_bind_block(struct clog_parser* parser, struct clog_ast_block
 	return 1;
 }
 
-static int clog_ast_bind(struct clog_parser* parser, struct clog_ast_block* block)
+static int clog_ast_bind(struct clog_parser* parser, struct clog_ast_block* block, struct clog_ast_statement_list** l)
 {
-	struct clog_ast_statement_list** l = &block->stmts;
 	while (*l)
 	{
 		switch ((*l)->stmt->type)
@@ -1744,6 +1750,15 @@ static int clog_ast_bind(struct clog_parser* parser, struct clog_ast_block* bloc
 		case clog_ast_statement_do:
 			if (!clog_ast_bind_block(parser,block,(*l)->stmt->stmt.do_stmt->loop_block) ||
 					!clog_ast_bind_expression(parser,block,(*l)->stmt->stmt.do_stmt->condition,0))
+			{
+				return 0;
+			}
+			break;
+
+		case clog_ast_statement_while:
+			if (!clog_ast_bind(parser,block,&(*l)->stmt->stmt.while_stmt->pre) ||
+					!clog_ast_bind_expression(parser,block,(*l)->stmt->stmt.while_stmt->condition,0) ||
+					!clog_ast_bind_block(parser,block,(*l)->stmt->stmt.while_stmt->loop_block))
 			{
 				return 0;
 			}
@@ -1811,7 +1826,7 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 
 	(*list)->stmt->stmt.block = block;
 
-	if (!clog_ast_bind(parser,block))
+	if (!clog_ast_bind(parser,block,&block->stmts))
 	{
 		clog_ast_statement_list_free(parser,*list);
 		*list = NULL;
@@ -2100,8 +2115,6 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 
 int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* cond_stmt, struct clog_ast_statement_list* loop_stmt)
 {
-	struct clog_ast_expression* cond_expr = NULL;
-
 	*list = NULL;
 	if (!cond_stmt)
 	{
@@ -2109,37 +2122,72 @@ int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_
 		return 0;
 	}
 
-	/* Translate while (E) {S} => if (E) do {S} while (E) */
+	/* Rewrite to force compound statements: while (1) var i  =>  while (1) { var i; } */
+	if (loop_stmt)
+	{
+		if (!clog_ast_statement_list_alloc_block(parser,&loop_stmt,loop_stmt))
+		{
+			clog_ast_statement_list_free(parser,cond_stmt);
+			return 0;
+		}
+	}
+
+	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_while))
+	{
+		clog_ast_statement_list_free(parser,cond_stmt);
+		clog_ast_statement_list_free(parser,loop_stmt);
+		return 0;
+	}
+
+	(*list)->stmt->stmt.while_stmt = clog_malloc(sizeof(struct clog_ast_statement_while));
+	if (!(*list)->stmt->stmt.while_stmt)
+	{
+		clog_ast_statement_list_free(parser,cond_stmt);
+		clog_ast_statement_list_free(parser,loop_stmt);
+		clog_free((*list)->stmt);
+		clog_free(*list);
+		*list = NULL;
+		return clog_ast_out_of_memory(parser);
+	}
 
 	/* Clone the condition expression */
 	if (cond_stmt->stmt->type == clog_ast_statement_declaration || cond_stmt->stmt->type == clog_ast_statement_constant)
 	{
-		if (!clog_ast_expression_clone(parser,&cond_expr,cond_stmt->next->stmt->stmt.expression))
+		if (!clog_ast_expression_clone(parser,&(*list)->stmt->stmt.while_stmt->condition,cond_stmt->next->stmt->stmt.expression->expr.builtin->args[1]))
 		{
 			clog_ast_statement_list_free(parser,cond_stmt);
 			clog_ast_statement_list_free(parser,loop_stmt);
 			return 0;
 		}
+
+		(*list)->stmt->stmt.while_stmt->pre = cond_stmt;
 	}
 	else
 	{
-		if (!clog_ast_expression_clone(parser,&cond_expr,cond_stmt->stmt->stmt.expression))
+		if (!clog_ast_expression_clone(parser,&(*list)->stmt->stmt.while_stmt->condition,cond_stmt->stmt->stmt.expression))
 		{
 			clog_ast_statement_list_free(parser,cond_stmt);
 			clog_ast_statement_list_free(parser,loop_stmt);
 			return 0;
 		}
-	}
 
-	/* Create the do loop */
-	if (!clog_ast_statement_list_alloc_do(parser,list,cond_expr,loop_stmt))
-	{
+		cond_stmt->stmt->stmt.expression = NULL;
 		clog_ast_statement_list_free(parser,cond_stmt);
-		return 0;
+
+		(*list)->stmt->stmt.while_stmt->pre = NULL;
 	}
 
-	/* Create the if */
-	return clog_ast_statement_list_alloc_if(parser,list,cond_stmt,*list,NULL);
+	/* Create the loop */
+	(*list)->stmt->stmt.while_stmt->loop_block = NULL;
+	if (loop_stmt)
+	{
+		(*list)->stmt->stmt.while_stmt->loop_block = loop_stmt->stmt->stmt.block;
+		loop_stmt->stmt->stmt.block = NULL;
+		clog_ast_statement_list_free(parser,loop_stmt);
+	}
+
+	/* Return wrapped up in a block */
+	return clog_ast_statement_list_alloc_block(parser,list,*list);
 }
 
 int clog_ast_statement_list_alloc_for(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* init_stmt, struct clog_ast_statement_list* cond_stmt, struct clog_ast_expression* iter_expr, struct clog_ast_statement_list* loop_stmt)
@@ -2229,6 +2277,7 @@ int clog_ast_statement_list_alloc_return(struct clog_parser* parser, struct clog
 static void __dump_indent(size_t indent)
 {
 	size_t t = 0;
+	printf("\n");
 	for (;t < indent;++t)
 		printf("    ");
 }
@@ -2355,7 +2404,7 @@ static void __dump_expr(const struct clog_ast_expression* expr)
 static void __dump_block(size_t indent, const struct clog_ast_block* block)
 {
 	struct clog_ast_variable* v;
-	printf("{\n");
+	printf("{");
 	__dump_indent(indent);
 	printf("  Locals = [");
 	for (v=block->locals;v;v=v->next)
@@ -2363,17 +2412,18 @@ static void __dump_block(size_t indent, const struct clog_ast_block* block)
 	printf("], Externs = [");
 	for (v=block->externs;v;v=v->next)
 		printf("%s%s ",v->id.str,v->assigned ? "*" : "");
-	printf("]\n");
+	printf("]");
 	__dump(indent+1,block->stmts);
 	__dump_indent(indent);
-	printf("}\n");
+	printf("}");
 }
 
 static void __dump(size_t indent, const struct clog_ast_statement_list* list)
 {
 	for (;list;list = list->next)
 	{
-		__dump_indent(indent);
+		if (indent != -1)
+			__dump_indent(indent);
 
 		switch (list->stmt->type)
 		{
@@ -2382,36 +2432,36 @@ static void __dump(size_t indent, const struct clog_ast_statement_list* list)
 			break;
 
 		case clog_ast_statement_declaration:
-			printf("var %.*s;\n",(int)list->stmt->stmt.declaration->value.string.len,list->stmt->stmt.declaration->value.string.str);
+			printf("var %.*s;",(int)list->stmt->stmt.declaration->value.string.len,list->stmt->stmt.declaration->value.string.str);
 			break;
 
 		case clog_ast_statement_constant:
-			printf("const %.*s;\n",(int)list->stmt->stmt.declaration->value.string.len,list->stmt->stmt.declaration->value.string.str);
+			printf("const %.*s;",(int)list->stmt->stmt.declaration->value.string.len,list->stmt->stmt.declaration->value.string.str);
 			break;
 
 		case clog_ast_statement_expression:
 			__dump_expr(list->stmt->stmt.expression);
-			printf(";\n");
+			printf(";");
 			break;
 
 		case clog_ast_statement_return:
 			printf("return ");
 			__dump_expr(list->stmt->stmt.expression);
-			printf(";\n");
+			printf(";");
 			break;
 
 		case clog_ast_statement_break:
-			printf("break;\n");
+			printf("break;");
 			break;
 
 		case clog_ast_statement_continue:
-			printf("continue;\n");
+			printf("continue;");
 			break;
 
 		case clog_ast_statement_if:
 			printf("if (");
 			__dump_expr(list->stmt->stmt.if_stmt->condition);
-			printf(")\n");
+			printf(")");
 			if (list->stmt->stmt.if_stmt->true_block)
 			{
 				__dump_indent(indent);
@@ -2420,19 +2470,19 @@ static void __dump(size_t indent, const struct clog_ast_statement_list* list)
 			else
 			{
 				__dump_indent(indent+1);
-				printf(";\n");
+				printf(";");
 			}
 			if (list->stmt->stmt.if_stmt->false_block)
 			{
 				__dump_indent(indent);
-				printf("else\n");
+				printf("else");
 				__dump_indent(indent);
 				__dump_block(indent,list->stmt->stmt.if_stmt->false_block);
 			}
 			break;
 
 		case clog_ast_statement_do:
-			printf("do\n");
+			printf("do");
 			if (list->stmt->stmt.do_stmt->loop_block)
 			{
 				__dump_indent(indent);
@@ -2441,12 +2491,30 @@ static void __dump(size_t indent, const struct clog_ast_statement_list* list)
 			else
 			{
 				__dump_indent(indent+1);
-				printf(";\n");
+				printf(";");
 			}
 			__dump_indent(indent);
 			printf("while (");
 			__dump_expr(list->stmt->stmt.do_stmt->condition);
-			printf(")\n");
+			printf(")");
+			break;
+
+		case clog_ast_statement_while:
+			printf("while (");
+			if (list->stmt->stmt.while_stmt->pre)
+				__dump(-1,list->stmt->stmt.while_stmt->pre);
+			__dump_expr(list->stmt->stmt.while_stmt->condition);
+			printf(")");
+			if (list->stmt->stmt.while_stmt->loop_block)
+			{
+				__dump_indent(indent);
+				__dump_block(indent,list->stmt->stmt.while_stmt->loop_block);
+			}
+			else
+			{
+				__dump_indent(indent+1);
+				printf(";");
+			}
 			break;
 		}
 	}
@@ -2491,7 +2559,7 @@ int clog_parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_
 
 	if (retval && !parser.failed)
 	{
-		printf("Success!\n");
+		printf("\n\nSuccess!\n");
 
 		{ void* TODO; /* Check for undeclared externs */ }
 

@@ -164,6 +164,7 @@ struct clog_ast_statement
 		clog_ast_statement_constant,
 		clog_ast_statement_if,
 		clog_ast_statement_do,
+		clog_ast_statement_while,
 		clog_ast_statement_break,
 		clog_ast_statement_continue,
 		clog_ast_statement_return
@@ -187,6 +188,13 @@ struct clog_ast_statement
 			struct clog_ast_expression* condition;
 			struct clog_ast_block* loop_block;
 		}* do_stmt;
+
+		struct clog_ast_statement_while
+		{
+			struct clog_ast_statement_list* pre;
+			struct clog_ast_expression* condition;
+			struct clog_ast_block* loop_block;
+		}* while_stmt;
 	} stmt;
 };
 
