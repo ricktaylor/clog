@@ -2004,7 +2004,6 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 
 		/* Now rewrite if (var x = 1) ... => { var x = 1; if ((bool)x) ... } */
 		if (!clog_ast_expression_clone(parser,&cond_expr,cond->next->stmt->stmt.expression->expr.builtin->args[0]) ||
-				!clog_ast_expression_alloc_builtin1(parser,&cond_expr,CLOG_TOKEN_TRUE,cond_expr) ||
 				!clog_ast_statement_list_alloc_expression(parser,&cond2,cond_expr) ||
 				!clog_ast_statement_list_alloc_if(parser,&cond->next->next,cond2,true_stmt,false_stmt))
 		{
@@ -2013,6 +2012,24 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		}
 
 		return clog_ast_statement_list_alloc_block(parser,list,cond);
+	}
+
+	/* Check for constant condition */
+	if (cond->stmt->stmt.expression->type == clog_ast_expression_literal)
+	{
+		clog_ast_literal_bool_promote(cond->stmt->stmt.expression->expr.literal);
+		if (cond->stmt->stmt.expression->expr.literal->value.integer)
+		{
+			clog_ast_statement_list_free(parser,false_stmt);
+			*list = true_stmt;
+		}
+		else
+		{
+			clog_ast_statement_list_free(parser,true_stmt);
+			*list = false_stmt;
+		}
+		clog_ast_statement_list_free(parser,cond);
+		return 1;
 	}
 
 	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_if))
@@ -2035,7 +2052,18 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		return clog_ast_out_of_memory(parser);
 	}
 
-	(*list)->stmt->stmt.if_stmt->condition = cond->stmt->stmt.expression;
+	if (!clog_ast_expression_alloc_builtin1(parser,&(*list)->stmt->stmt.if_stmt->condition,CLOG_TOKEN_TRUE,cond->stmt->stmt.expression))
+	{
+		cond->stmt->stmt.expression = NULL;
+		clog_ast_statement_list_free(parser,cond);
+		clog_ast_statement_list_free(parser,true_stmt);
+		clog_ast_statement_list_free(parser,false_stmt);
+		clog_free((*list)->stmt);
+		clog_free(*list);
+		*list = NULL;
+		return 0;
+	}
+
 	cond->stmt->stmt.expression = NULL;
 	clog_ast_statement_list_free(parser,cond);
 
@@ -2074,6 +2102,18 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 		}
 	}
 
+	/* Check for constant false condition */
+	if (cond->type == clog_ast_expression_literal)
+	{
+		clog_ast_literal_bool_promote(cond->expr.literal);
+		if (!cond->expr.literal->value.integer)
+		{
+			clog_ast_expression_free(parser,cond);
+			*list = loop_stmt;
+			return 1;
+		}
+	}
+
 	if (!clog_ast_statement_list_alloc(parser,list,clog_ast_statement_do))
 	{
 		clog_ast_expression_free(parser,cond);
@@ -2092,7 +2132,15 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 		return clog_ast_out_of_memory(parser);
 	}
 
-	(*list)->stmt->stmt.do_stmt->condition = cond;
+	if (!clog_ast_expression_alloc_builtin1(parser,&(*list)->stmt->stmt.do_stmt->condition,CLOG_TOKEN_TRUE,cond))
+	{
+		clog_ast_statement_list_free(parser,loop_stmt);
+		clog_free((*list)->stmt);
+		clog_free(*list);
+		*list = NULL;
+		return 0;
+	}
+
 	(*list)->stmt->stmt.do_stmt->loop_block = NULL;
 	if (loop_stmt)
 	{
@@ -2106,6 +2154,7 @@ int clog_ast_statement_list_alloc_do(struct clog_parser* parser, struct clog_ast
 int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_ast_statement_list** list, struct clog_ast_statement_list* cond_stmt, struct clog_ast_statement_list* loop_stmt)
 {
 	*list = NULL;
+
 	if (!cond_stmt)
 	{
 		clog_ast_statement_list_free(parser,loop_stmt);
@@ -2148,6 +2197,9 @@ int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_
 		{
 			clog_ast_statement_list_free(parser,cond_stmt);
 			clog_ast_statement_list_free(parser,loop_stmt);
+			clog_free((*list)->stmt);
+			clog_free(*list);
+			*list = NULL;
 			return 0;
 		}
 
@@ -2160,6 +2212,9 @@ int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_
 		{
 			clog_ast_statement_list_free(parser,cond_stmt);
 			clog_ast_statement_list_free(parser,loop_stmt);
+			clog_free((*list)->stmt);
+			clog_free(*list);
+			*list = NULL;
 			return 0;
 		}
 
@@ -2167,6 +2222,21 @@ int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_
 		clog_ast_statement_list_free(parser,cond_stmt);
 
 		(*list)->stmt->stmt.while_stmt->pre = NULL;
+	}
+
+	/* Check for constant false condition */
+	if ((*list)->stmt->stmt.while_stmt->condition->type == clog_ast_expression_literal)
+	{
+		clog_ast_literal_bool_promote((*list)->stmt->stmt.while_stmt->condition->expr.literal);
+		if (!(*list)->stmt->stmt.while_stmt->condition->expr.literal->value.integer)
+		{
+			struct clog_ast_statement_list* l = (*list)->stmt->stmt.while_stmt->pre;
+			clog_ast_statement_list_free(parser,loop_stmt);
+			clog_ast_expression_free(parser,(*list)->stmt->stmt.while_stmt->condition);
+			clog_free((*list)->stmt);
+			clog_free(*list);
+			return clog_ast_statement_list_alloc_block(parser,list,l);
+		}
 	}
 
 	/* Create the loop */
