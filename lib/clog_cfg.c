@@ -33,10 +33,8 @@ static void clog_cfg_out_of_memory()
 
 
 static unsigned int s_gen = 0;
-static struct clog_cfg_block* s_block_list = NULL;
-static struct clog_cfg_block* s_block_list_last = NULL;
 
-static int clog_cfg_alloc_block(struct clog_cfg_block** block)
+static int clog_cfg_alloc_block(struct clog_cfg_block* from, struct clog_cfg_block** block)
 {
 	*block = clog_malloc(sizeof(struct clog_cfg_block));
 	if (!(*block))
@@ -49,11 +47,12 @@ static int clog_cfg_alloc_block(struct clog_cfg_block** block)
 	(*block)->refcount = 1;
 	(*block)->gen = ++s_gen;
 
-	if (!s_block_list_last)
-		s_block_list = *block;
-	else
-		s_block_list_last->a_next = *block;
-	s_block_list_last = *block;
+	if (from)
+	{
+		struct clog_cfg_block* next = from->a_next;
+		(*block)->a_next = next;
+		from->a_next = *block;
+	}
 
 	return 1;
 }
@@ -113,7 +112,7 @@ static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* bl
 
 static struct clog_cfg_block* clog_cfg_add_fallthru(struct clog_cfg_block* block)
 {
-	if (!block->fallthru && !clog_cfg_alloc_block(&block->fallthru))
+	if (!block->fallthru && !clog_cfg_alloc_block(block,&block->fallthru))
 		return NULL;
 
 	return block->fallthru;
@@ -122,7 +121,7 @@ static struct clog_cfg_block* clog_cfg_add_fallthru(struct clog_cfg_block* block
 static struct clog_cfg_block* clog_cfg_insert_block(struct clog_cfg_block* block)
 {
 	struct clog_cfg_block* fallthru = block->fallthru;
-	if (!clog_cfg_alloc_block(&block->fallthru))
+	if (!clog_cfg_alloc_block(block,&block->fallthru))
 	{
 		block->fallthru = fallthru;
 		return NULL;
@@ -140,7 +139,7 @@ static struct clog_cfg_block* clog_cfg_construct_if(struct clog_cfg_block* block
 		return NULL;
 
 	/* Insert true branch */
-	if (!clog_cfg_alloc_block(&block->branch))
+	if (!clog_cfg_alloc_block(block,&block->branch))
 		return NULL;
 
 	block->branch->fallthru = fallthru;
@@ -222,7 +221,7 @@ static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* bl
 	return block;
 }
 
-static void __dump_link(struct clog_cfg_block* block)
+static void __dump(struct clog_cfg_block* block)
 {
 	if (block)
 	{
@@ -236,19 +235,14 @@ static void __dump_link(struct clog_cfg_block* block)
 		else
 			printf("END\n");
 
-		__dump_link(block->a_next);
+		__dump(block->a_next);
 	}
-}
-
-static void __dump()
-{
-	__dump_link(s_block_list);
 }
 
 int clog_cfg_construct(const struct clog_ast_block* ast_block)
 {
 	struct clog_cfg_block* block;
-	if (!clog_cfg_alloc_block(&block))
+	if (!clog_cfg_alloc_block(NULL,&block))
 		return 0;
 
 	if (!clog_cfg_construct_block(block,ast_block))
@@ -256,7 +250,7 @@ int clog_cfg_construct(const struct clog_ast_block* ast_block)
 		return 0;
 	}
 
-	__dump();
+	__dump(block);
 
 	return 1;
 }
