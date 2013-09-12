@@ -1999,7 +1999,7 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 		}
 
 		/* Now rewrite if (var x = 1) ... => { var x; if (x = 1) ... } */
-		if (!clog_ast_expression_clone(parser,&cond_expr,cond->next->stmt->stmt.expression) ||
+		if (!clog_ast_expression_clone(parser,&cond_expr,cond->next->stmt->stmt.expression->expr.builtin->args[0]) ||
 				!clog_ast_statement_list_alloc_expression(parser,&cond2,cond_expr) ||
 				!clog_ast_statement_list_alloc_if(parser,&cond->next->next,cond2,true_stmt,false_stmt))
 		{
@@ -2492,6 +2492,8 @@ int clog_parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_
 	if (retval && !parser.failed)
 	{
 		printf("Success!\n");
+
+		{ void* TODO; /* Check for undeclared externs */ }
 
 		clog_cfg_construct(parser.pgm->stmt->stmt.block);
 	}
