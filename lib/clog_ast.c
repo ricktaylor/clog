@@ -1014,7 +1014,7 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 				clog_ast_expression_free(parser,p2);
 
 				if (type == CLOG_TOKEN_NOT_EQUALS)
-					p1->expr.literal->value.integer = (cmp ? 0 : 1);
+					p1->expr.literal->value.integer = (cmp != 0 ? 1 : 0);
 				else if (type == CLOG_TOKEN_LESS_THAN)
 					p1->expr.literal->value.integer = (cmp < 0 ? 1 : 0);
 				else if (type == CLOG_TOKEN_LESS_THAN_EQUALS)
@@ -1024,24 +1024,13 @@ int clog_ast_expression_alloc_builtin2(struct clog_parser* parser, struct clog_a
 				else if (type == CLOG_TOKEN_GREATER_THAN_EQUALS)
 					p1->expr.literal->value.integer = (cmp >= 0 ? 1 : 0);
 				else
-					p1->expr.literal->value.integer = cmp;
+					p1->expr.literal->value.integer = (cmp == 0 ? 1 : 0);
 
 				p1->expr.literal->type = clog_ast_literal_bool;
 				*expr = p1;
 				return 1;
 			}
-			if (type == CLOG_TOKEN_NOT_EQUALS)
-				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_LESS_THAN,p2,p1,NULL);
-			else if (type == CLOG_TOKEN_LESS_THAN)
-				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_GREATER_THAN_EQUALS,p2,p1,NULL);
-			else if (type == CLOG_TOKEN_LESS_THAN_EQUALS)
-				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_GREATER_THAN,p2,p1,NULL);
-			else if (type == CLOG_TOKEN_GREATER_THAN)
-				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_LESS_THAN_EQUALS,p2,p1,NULL);
-			else if (type == CLOG_TOKEN_GREATER_THAN_EQUALS)
-				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_LESS_THAN,p2,p1,NULL);
-			else
-				return clog_ast_expression_alloc_builtin(parser,expr,CLOG_TOKEN_EQUALS,p2,p1,NULL);
+			break;
 
 		case CLOG_TOKEN_LEFT_SHIFT:
 		case CLOG_TOKEN_RIGHT_SHIFT:
@@ -2013,8 +2002,9 @@ int clog_ast_statement_list_alloc_if(struct clog_parser* parser, struct clog_ast
 			}
 		}
 
-		/* Now rewrite if (var x = 1) ... => { var x; if (x = 1) ... } */
+		/* Now rewrite if (var x = 1) ... => { var x = 1; if ((bool)x) ... } */
 		if (!clog_ast_expression_clone(parser,&cond_expr,cond->next->stmt->stmt.expression->expr.builtin->args[0]) ||
+				!clog_ast_expression_alloc_builtin1(parser,&cond_expr,CLOG_TOKEN_TRUE,cond_expr) ||
 				!clog_ast_statement_list_alloc_expression(parser,&cond2,cond_expr) ||
 				!clog_ast_statement_list_alloc_if(parser,&cond->next->next,cond2,true_stmt,false_stmt))
 		{
@@ -2150,10 +2140,11 @@ int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_
 		return clog_ast_out_of_memory(parser);
 	}
 
-	/* Clone the condition expression */
 	if (cond_stmt->stmt->type == clog_ast_statement_declaration || cond_stmt->stmt->type == clog_ast_statement_constant)
 	{
-		if (!clog_ast_expression_clone(parser,&(*list)->stmt->stmt.while_stmt->condition,cond_stmt->next->stmt->stmt.expression->expr.builtin->args[1]))
+		/* Now rewrite if (var x = 1) ... => { var x = 1; while ((bool)x) ... } */
+		if (!clog_ast_expression_clone(parser,&(*list)->stmt->stmt.while_stmt->condition,cond_stmt->next->stmt->stmt.expression->expr.builtin->args[0]) ||
+				!clog_ast_expression_alloc_builtin1(parser,&(*list)->stmt->stmt.while_stmt->condition,CLOG_TOKEN_TRUE,(*list)->stmt->stmt.while_stmt->condition))
 		{
 			clog_ast_statement_list_free(parser,cond_stmt);
 			clog_ast_statement_list_free(parser,loop_stmt);
@@ -2164,7 +2155,8 @@ int clog_ast_statement_list_alloc_while(struct clog_parser* parser, struct clog_
 	}
 	else
 	{
-		if (!clog_ast_expression_clone(parser,&(*list)->stmt->stmt.while_stmt->condition,cond_stmt->stmt->stmt.expression))
+		if (!clog_ast_expression_clone(parser,&(*list)->stmt->stmt.while_stmt->condition,cond_stmt->stmt->stmt.expression) ||
+				!clog_ast_expression_alloc_builtin1(parser,&(*list)->stmt->stmt.while_stmt->condition,CLOG_TOKEN_TRUE,(*list)->stmt->stmt.while_stmt->condition))
 		{
 			clog_ast_statement_list_free(parser,cond_stmt);
 			clog_ast_statement_list_free(parser,loop_stmt);
