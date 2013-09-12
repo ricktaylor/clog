@@ -147,13 +147,6 @@ void clog_ast_expression_list_free(struct clog_parser* parser, struct clog_ast_e
 int clog_ast_expression_list_alloc(struct clog_parser* parser, struct clog_ast_expression_list** list, struct clog_ast_expression* expr);
 int clog_ast_expression_list_append(struct clog_parser* parser, struct clog_ast_expression_list** list, struct clog_ast_expression* expr);
 
-struct clog_ast_block
-{
-	struct clog_ast_variable* locals;
-	struct clog_ast_variable* externs;
-	struct clog_ast_statement_list* stmts;
-};
-
 struct clog_ast_statement
 {
 	enum clog_ast_statement_type
@@ -173,8 +166,14 @@ struct clog_ast_statement
 	union clog_ast_statement_u
 	{
 		struct clog_ast_expression* expression;
-		struct clog_ast_block* block;
 		struct clog_ast_literal* declaration;
+
+		struct clog_ast_block
+		{
+			struct clog_ast_variable* locals;
+			struct clog_ast_variable* externs;
+			struct clog_ast_statement_list* stmts;
+		}* block;
 
 		struct clog_ast_statement_if
 		{
