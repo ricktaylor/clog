@@ -2454,13 +2454,6 @@ static void __dump_expr(const struct clog_ast_expression* expr)
 		printf(")");
 		break;
 	}
-
-	/*printf("[");
-	if (expr->constant)
-		printf("C");
-	if (expr->lvalue)
-		printf("L");
-	printf("]");*/
 }
 
 static void __dump_block(size_t indent, const struct clog_ast_block* block)

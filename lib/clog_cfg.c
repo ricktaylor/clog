@@ -19,6 +19,7 @@ struct clog_cfg_block
 	unsigned int refcount;
 
 
+	struct clog_cfg_block* break_point;
 	struct clog_cfg_block* branch;
 	struct clog_cfg_block* fallthru;
 
@@ -80,6 +81,14 @@ static struct clog_cfg_block* clog_cfg_insert_fallthru(struct clog_cfg_block* bl
 	return block->fallthru;
 }
 
+static void clog_cfg_add_block_reference(struct clog_cfg_block* from, struct clog_cfg_block* to)
+{
+	/* Add a back pointer to the from block from the to block */
+	void* TODO = from;
+
+	++to->fallthru->refcount;
+}
+
 static struct clog_cfg_block* clog_cfg_insert_branch(struct clog_cfg_block* block)
 {
 	struct clog_cfg_block* branch = block->branch;
@@ -87,7 +96,7 @@ static struct clog_cfg_block* clog_cfg_insert_branch(struct clog_cfg_block* bloc
 		return NULL;
 
 	block->branch->fallthru = block->fallthru;
-	++block->fallthru->refcount;
+	clog_cfg_add_block_reference(block->branch,block->fallthru);
 
 	block->branch->branch = branch;
 	return block->branch;
@@ -127,7 +136,7 @@ static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block
 					return NULL;
 
 				or_case->branch = block->branch;
-				++block->branch->refcount;
+				clog_cfg_add_block_reference(or_case,block->branch);
 
 				if (!clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[0]) ||
 						!clog_cfg_construct_condition(or_case,ast_expr->expr.builtin->args[1]))
@@ -174,43 +183,51 @@ static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* bl
 static struct clog_cfg_block* clog_cfg_construct_if(struct clog_cfg_block* block, const struct clog_ast_statement_if* ast_if)
 {
 	struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
-	struct clog_cfg_block* branch = clog_cfg_insert_branch(block);
+	struct clog_cfg_block* true_branch = clog_cfg_insert_branch(block);
+	struct clog_cfg_block* false_branch;
 
-	if (!fallthru || !branch)
+	if (!fallthru || !true_branch)
 		return NULL;
 
-	if (ast_if->false_block && !(fallthru = clog_cfg_insert_fallthru(block)))
+	if (ast_if->false_block && !(false_branch = clog_cfg_insert_fallthru(block)))
 		return NULL;
 
 	if (!clog_cfg_construct_condition(block,ast_if->condition))
 		return NULL;
 
-	if (!clog_cfg_construct_block(branch,ast_if->true_block))
+	if (!clog_cfg_construct_block(true_branch,ast_if->true_block))
 		return NULL;
 
-	if (ast_if->false_block)
-		return clog_cfg_construct_block(fallthru,ast_if->false_block);
+	if (ast_if->false_block && !clog_cfg_construct_block(false_branch,ast_if->false_block))
+		return NULL;
 
 	return fallthru;
 }
 
 static struct clog_cfg_block* clog_cfg_construct_do(struct clog_cfg_block* block, const struct clog_ast_statement_do* ast_do)
 {
+	struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
 	struct clog_cfg_block* loop_body;
 	struct clog_cfg_block* condition;
 
 	loop_body = clog_cfg_insert_fallthru(block);
+	if (!loop_body)
+		return NULL;
+
 	condition = clog_cfg_insert_fallthru(loop_body);
-	if (!loop_body || !condition)
+	if (!!condition)
 		return NULL;
 
 	condition->branch = loop_body;
-	++loop_body->refcount;
+	clog_cfg_add_block_reference(condition,loop_body);
 
 	if (!clog_cfg_construct_block(loop_body,ast_do->loop_block))
 		return NULL;
 
-	return clog_cfg_construct_condition(condition,ast_do->condition);
+	if (!clog_cfg_construct_condition(condition,ast_do->condition))
+		return NULL;
+
+	return fallthru;
 }
 
 static struct clog_cfg_block* clog_cfg_construct_while(struct clog_cfg_block* block, const struct clog_ast_statement_while* ast_while)
@@ -234,7 +251,7 @@ static struct clog_cfg_block* clog_cfg_construct_while(struct clog_cfg_block* bl
 
 	branch = header->branch;
 	branch->fallthru = header;
-	++header->refcount;
+	clog_cfg_add_block_reference(branch,header);
 
 	if (!clog_cfg_construct_condition(header,ast_while->condition))
 		return NULL;
