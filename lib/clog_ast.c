@@ -1815,12 +1815,12 @@ int clog_ast_statement_list_alloc_block(struct clog_parser* parser, struct clog_
 
 	(*list)->stmt->stmt.block = block;
 
-	if (!clog_ast_bind(parser,block,&block->stmts))
+/*	if (!clog_ast_bind(parser,block,&block->stmts))
 	{
 		clog_ast_statement_list_free(parser,*list);
 		*list = NULL;
 		return 0;
-	}
+	}*/
 
 	return 1;
 }
@@ -2610,11 +2610,11 @@ int clog_parse(int (*rd_fn)(void* p, unsigned char* buf, size_t* len), void* rd_
 
 	clog_parserFree(lemon,&clog_free);
 
-	__dump(0,parser.pgm);
+/*	__dump(0,parser.pgm);*/
 
 	if (retval && !parser.failed)
 	{
-		printf("\n\nSuccess!\n");
+/*		printf("\n\nSuccess!\n"); */
 
 		{ void* TODO; /* Check for undeclared externs */ }
 

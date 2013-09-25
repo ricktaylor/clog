@@ -18,11 +18,15 @@ struct clog_cfg_block
 	struct clog_cfg_block* a_next;
 	unsigned int refcount;
 
-
-	struct clog_cfg_block* break_point;
 	struct clog_cfg_block* branch;
 	struct clog_cfg_block* fallthru;
 
+};
+
+struct clog_cfg_context
+{
+	struct clog_cfg_block* break_branch;
+	struct clog_cfg_block* continue_branch;
 };
 
 static void __dump();
@@ -58,7 +62,7 @@ static int clog_cfg_alloc_block(struct clog_cfg_block* from, struct clog_cfg_blo
 	return 1;
 }
 
-static struct clog_cfg_block* clog_cfg_construct_expression(struct clog_cfg_block* block, const struct clog_ast_expression* ast_expr)
+static struct clog_cfg_block* clog_cfg_construct_expression(struct clog_cfg_block* block, const struct clog_ast_expression* ast_expr, struct clog_cfg_context* ctx)
 {
 	return block;
 }
@@ -102,7 +106,7 @@ static struct clog_cfg_block* clog_cfg_insert_branch(struct clog_cfg_block* bloc
 	return block->branch;
 }
 
-static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block* block, const struct clog_ast_expression* ast_expr)
+static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block* block, const struct clog_ast_expression* ast_expr, struct clog_cfg_context* ctx)
 {
 	switch (ast_expr->type)
 	{
@@ -123,9 +127,9 @@ static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block
 		switch (ast_expr->expr.builtin->type)
 		{
 		case CLOG_TOKEN_COMMA:
-			block = clog_cfg_construct_expression(block,ast_expr->expr.builtin->args[0]);
+			block = clog_cfg_construct_expression(block,ast_expr->expr.builtin->args[0],ctx);
 			if (block)
-				block = clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[1]);
+				block = clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[1],ctx);
 			break;
 
 		case CLOG_TOKEN_OR:
@@ -138,8 +142,8 @@ static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block
 				or_case->branch = block->branch;
 				clog_cfg_add_block_reference(or_case,block->branch);
 
-				if (!clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[0]) ||
-						!clog_cfg_construct_condition(or_case,ast_expr->expr.builtin->args[1]))
+				if (!clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[0],ctx) ||
+						!clog_cfg_construct_condition(or_case,ast_expr->expr.builtin->args[1],ctx))
 				{
 					return NULL;
 				}
@@ -154,8 +158,8 @@ static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block
 				if (!fallthru || !and_case)
 					return NULL;
 
-				if (!clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[0]) ||
-						!clog_cfg_construct_condition(and_case,ast_expr->expr.builtin->args[1]))
+				if (!clog_cfg_construct_condition(block,ast_expr->expr.builtin->args[0],ctx) ||
+						!clog_cfg_construct_condition(and_case,ast_expr->expr.builtin->args[1],ctx))
 				{
 					return NULL;
 				}
@@ -178,9 +182,9 @@ static struct clog_cfg_block* clog_cfg_construct_condition(struct clog_cfg_block
 	return block;
 }
 
-static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* block, const struct clog_ast_block* ast_block);
+static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* block, const struct clog_ast_block* ast_block, struct clog_cfg_context* ctx);
 
-static struct clog_cfg_block* clog_cfg_construct_if(struct clog_cfg_block* block, const struct clog_ast_statement_if* ast_if)
+static struct clog_cfg_block* clog_cfg_construct_if(struct clog_cfg_block* block, const struct clog_ast_statement_if* ast_if, struct clog_cfg_context* ctx)
 {
 	struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
 	struct clog_cfg_block* true_branch = clog_cfg_insert_branch(block);
@@ -192,23 +196,25 @@ static struct clog_cfg_block* clog_cfg_construct_if(struct clog_cfg_block* block
 	if (ast_if->false_block && !(false_branch = clog_cfg_insert_fallthru(block)))
 		return NULL;
 
-	if (!clog_cfg_construct_condition(block,ast_if->condition))
+	if (!clog_cfg_construct_condition(block,ast_if->condition,ctx))
 		return NULL;
 
-	if (!clog_cfg_construct_block(true_branch,ast_if->true_block))
+	if (!clog_cfg_construct_block(true_branch,ast_if->true_block,ctx))
 		return NULL;
 
-	if (ast_if->false_block && !clog_cfg_construct_block(false_branch,ast_if->false_block))
+	if (ast_if->false_block && !clog_cfg_construct_block(false_branch,ast_if->false_block,ctx))
 		return NULL;
 
 	return fallthru;
 }
 
-static struct clog_cfg_block* clog_cfg_construct_do(struct clog_cfg_block* block, const struct clog_ast_statement_do* ast_do)
+static struct clog_cfg_block* clog_cfg_construct_do(struct clog_cfg_block* block, const struct clog_ast_statement_do* ast_do, struct clog_cfg_context* prev_ctx)
 {
 	struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
 	struct clog_cfg_block* loop_body;
 	struct clog_cfg_block* condition;
+
+	struct clog_cfg_context ctx = {0};
 
 	loop_body = clog_cfg_insert_fallthru(block);
 	if (!loop_body)
@@ -221,20 +227,22 @@ static struct clog_cfg_block* clog_cfg_construct_do(struct clog_cfg_block* block
 	condition->branch = loop_body;
 	clog_cfg_add_block_reference(condition,loop_body);
 
-	if (!clog_cfg_construct_block(loop_body,ast_do->loop_block))
+	if (!clog_cfg_construct_block(loop_body,ast_do->loop_block,&ctx))
 		return NULL;
 
-	if (!clog_cfg_construct_condition(condition,ast_do->condition))
+	if (!clog_cfg_construct_condition(condition,ast_do->condition,&ctx))
 		return NULL;
 
 	return fallthru;
 }
 
-static struct clog_cfg_block* clog_cfg_construct_while(struct clog_cfg_block* block, const struct clog_ast_statement_while* ast_while)
+static struct clog_cfg_block* clog_cfg_construct_while(struct clog_cfg_block* block, const struct clog_ast_statement_while* ast_while, struct clog_cfg_context* prev_ctx)
 {
 	struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
 	struct clog_cfg_block* header = clog_cfg_insert_fallthru(block);
 	struct clog_cfg_block* branch;
+
+	struct clog_cfg_context ctx = {0};
 
 	if (!fallthru)
 		return NULL;
@@ -243,7 +251,7 @@ static struct clog_cfg_block* clog_cfg_construct_while(struct clog_cfg_block* bl
 	{
 		const struct clog_ast_statement_list* list = ast_while->pre;
 		for (;list && header;list = list->next)
-			header = clog_cfg_construct_expression(header,list->stmt->stmt.expression);
+			header = clog_cfg_construct_expression(header,list->stmt->stmt.expression,&ctx);
 	}
 
 	if (!header || !clog_cfg_alloc_block(header,&header->branch))
@@ -253,45 +261,50 @@ static struct clog_cfg_block* clog_cfg_construct_while(struct clog_cfg_block* bl
 	branch->fallthru = header;
 	clog_cfg_add_block_reference(branch,header);
 
-	if (!clog_cfg_construct_condition(header,ast_while->condition))
+	if (!clog_cfg_construct_condition(header,ast_while->condition,&ctx))
 		return NULL;
 
-	if (!clog_cfg_construct_block(branch,ast_while->loop_block))
+	if (!clog_cfg_construct_block(branch,ast_while->loop_block,&ctx))
 		return NULL;
 
 	return fallthru;
 }
 
-static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* block, const struct clog_ast_block* ast_block)
+static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* block, const struct clog_ast_block* ast_block, struct clog_cfg_context* ctx)
 {
+	struct clog_cfg_block* fallthru = clog_cfg_append_fallthru(block);
+	struct clog_cfg_block* trailer = NULL;
 	const struct clog_ast_statement_list* list = ast_block->stmts;
+
+	if (!fallthru)
+		return NULL;
+
 	for (;list && block;list = list->next)
 	{
 		switch (list->stmt->type)
 		{
 		case clog_ast_statement_declaration:
 		case clog_ast_statement_constant:
-			/* These should have been dropped */
 			break;
 
 		case clog_ast_statement_expression:
-			block = clog_cfg_construct_expression(block,list->stmt->stmt.expression);
+			block = clog_cfg_construct_expression(block,list->stmt->stmt.expression,ctx);
 			break;
 
 		case clog_ast_statement_block:
-			block = clog_cfg_construct_block(block,list->stmt->stmt.block);
+			block = clog_cfg_construct_block(block,list->stmt->stmt.block,ctx);
 			break;
 
 		case clog_ast_statement_if:
-			block = clog_cfg_construct_if(block,list->stmt->stmt.if_stmt);
+			block = clog_cfg_construct_if(block,list->stmt->stmt.if_stmt,ctx);
 			break;
 
 		case clog_ast_statement_do:
-			block = clog_cfg_construct_do(block,list->stmt->stmt.do_stmt);
+			block = clog_cfg_construct_do(block,list->stmt->stmt.do_stmt,ctx);
 			break;
 
 		case clog_ast_statement_while:
-			block = clog_cfg_construct_while(block,list->stmt->stmt.while_stmt);
+			block = clog_cfg_construct_while(block,list->stmt->stmt.while_stmt,ctx);
 			break;
 
 		case clog_ast_statement_break:
@@ -301,22 +314,18 @@ static struct clog_cfg_block* clog_cfg_construct_block(struct clog_cfg_block* bl
 		}
 	}
 
-	return block;
+	return fallthru;
 }
 
 static void __dump(struct clog_cfg_block* block)
 {
 	if (block)
 	{
-		printf("%u: (ref: %u)\n",block->gen,block->refcount);
-
 		if (block->branch)
-			printf("  IF goto %u\n",block->branch->gen);
+			printf("%u -> %u;\n",block->gen,block->branch->gen);
 
 		if (block->fallthru)
-			printf("  goto %u\n",block->fallthru->gen);
-		else
-			printf("  END\n");
+			printf("%u -> %u;\n",block->gen,block->fallthru->gen);
 
 		__dump(block->a_next);
 	}
@@ -324,16 +333,19 @@ static void __dump(struct clog_cfg_block* block)
 
 int clog_cfg_construct(const struct clog_ast_block* ast_block)
 {
+	struct clog_cfg_context context = {0};
 	struct clog_cfg_block* block;
 	if (!clog_cfg_alloc_block(NULL,&block))
 		return 0;
 
-	if (!clog_cfg_construct_block(block,ast_block))
+	if (!clog_cfg_construct_block(block,ast_block,&context))
 	{
 		return 0;
 	}
 
+	printf("digraph cfg {\n");
 	__dump(block);
+	printf("}");
 
 	return 1;
 }
